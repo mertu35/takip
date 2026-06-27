@@ -46,6 +46,7 @@ export const INITIAL_PRODUCTS = [
     categoryId: "cat-1",
     categoryName: "Ofis Malzemeleri",
     price: 180,
+    taxRate: 20,
     stock: 75,
     criticalStock: 20,
     unit: "Adet",
@@ -58,6 +59,7 @@ export const INITIAL_PRODUCTS = [
     categoryId: "cat-1",
     categoryName: "Ofis Malzemeleri",
     price: 35,
+    taxRate: 20,
     stock: 12,
     criticalStock: 25, // Kritik stokta! (12 < 25)
     unit: "Adet",
@@ -70,6 +72,7 @@ export const INITIAL_PRODUCTS = [
     categoryId: "cat-2",
     categoryName: "Elektronik",
     price: 450,
+    taxRate: 20,
     stock: 15,
     criticalStock: 5,
     unit: "Adet",
@@ -82,6 +85,7 @@ export const INITIAL_PRODUCTS = [
     categoryId: "cat-2",
     categoryName: "Elektronik",
     price: 4200,
+    taxRate: 20,
     stock: 4,
     criticalStock: 5, // Kritik stokta! (4 < 5)
     unit: "Adet",
@@ -94,6 +98,7 @@ export const INITIAL_PRODUCTS = [
     categoryId: "cat-3",
     categoryName: "Gıda & Tüketim",
     price: 220,
+    taxRate: 10,
     stock: 3,
     criticalStock: 10, // Kritik stokta! (3 < 10)
     unit: "Adet",
@@ -106,6 +111,7 @@ export const INITIAL_PRODUCTS = [
     categoryId: "cat-4",
     categoryName: "Mobilya",
     price: 2950,
+    taxRate: 20,
     stock: 18,
     criticalStock: 4,
     unit: "Adet",

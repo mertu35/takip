@@ -1,16 +1,22 @@
 // Takip Sistemi - Satışçı Modülü (Sales)
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { getCustomers, getProducts, addSale, addCustomer, getSales } from "../services/db";
+import { getCustomers, getProducts, addSale, addCustomer, getSales, resubmitSale } from "../services/db";
+import { generateInvoicePDF } from "../utils/generateInvoicePDF";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { 
-  Plus, 
-  Trash2, 
-  Search, 
-  UserPlus, 
-  Printer, 
-  FileText, 
-  AlertCircle
+import BarcodeScanner from "../components/BarcodeScanner";
+import {
+  Plus,
+  Trash2,
+  Search,
+  UserPlus,
+  Printer,
+  FileText,
+  AlertCircle,
+  ScanLine,
+  RefreshCw,
+  Edit3,
+  Download
 } from "lucide-react";
 
 // Çevrimdışı ve Güvenli HTML5 Canvas Tabanlı Code 39 Barkod Bileşeni
@@ -132,20 +138,32 @@ const Sales = () => {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [prodSearch, setProdSearch] = useState("");
+  const [showScanner, setShowScanner] = useState(false);
+
+  // Reddedilen Satış Düzenleme Modal States
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editSale, setEditSale] = useState(null);
+  const [editCart, setEditCart] = useState([]);
+  const [editNotes, setEditNotes] = useState("");
+  const [editDiscount, setEditDiscount] = useState(0);
+  const [editProdSearch, setEditProdSearch] = useState("");
+  const [editSelectedProductId, setEditSelectedProductId] = useState("");
+  const [editQuantity, setEditQuantity] = useState(1);
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
+    if (!showCustomerModal && !showReceiptModal) return;
+
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
         setShowCustomerModal(false);
         setShowReceiptModal(false);
       }
     };
-    if (showCustomerModal || showReceiptModal) {
-      window.addEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "unset";
@@ -189,15 +207,11 @@ const Sales = () => {
       const [custData, prodData, salesData] = await Promise.all([
         getCustomers(),
         getProducts(),
-        getSales()
+        getSales(user?.role, user?.uid)
       ]);
       setCustomers(custData);
       setProducts(prodData);
-      // Satışçı sadece kendi satışlarını görebilsin (Yönetici veya Muhasebeci hepsini)
-      const filteredSales = (user?.role === "admin" || user?.role === "accounting")
-        ? salesData 
-        : salesData.filter(s => s.salespersonId === user?.uid);
-      setSalesHistory(filteredSales);
+      setSalesHistory(salesData);
     } catch (err) {
       console.error("Satış verileri yüklenirken hata:", err);
     } finally {
@@ -254,7 +268,8 @@ const Sales = () => {
           productCode: prod.code,
           quantity: qty,
           price: prod.price,
-          taxRate: 20, // Türkiye standart KDV oranı %20
+          costPrice: prod.costPrice ?? 0,
+          taxRate: prod.taxRate ?? 20,
           total: qty * prod.price
         }
       ]);
@@ -268,6 +283,86 @@ const Sales = () => {
 
   const handleRemoveFromSepet = (idx) => {
     setCart(cart.filter((_, i) => i !== idx));
+  };
+
+  const handleBarcodeDetected = (code) => {
+    setShowScanner(false);
+    // Barkod veya ürün kodu ile eşleştir
+    const prod = products.find(p => p.barcode === code || p.code === code);
+    if (prod) {
+      setSelectedProductId(prod.id);
+      setProdSearch(prod.name);
+      showToast(`"${prod.name}" ürünü bulundu.`, "success");
+    } else {
+      setProdSearch(code);
+      showToast(`"${code}" barkoduna sahip ürün bulunamadı. Kod arama alanına yazıldı.`, "warning");
+    }
+  };
+
+  // --- REDDEDİLEN SATIŞ DÜZENLEME ---
+  const handleOpenEditModal = (sale) => {
+    setEditSale(sale);
+    setEditCart(sale.items.map(i => ({ ...i })));
+    setEditNotes(sale.notes || "");
+    setEditDiscount(sale.discountAmount || 0);
+    setEditProdSearch("");
+    setEditSelectedProductId("");
+    setEditQuantity(1);
+    setShowEditModal(true);
+  };
+
+  const handleEditAddToCart = () => {
+    const prod = products.find(p => p.id === editSelectedProductId);
+    if (!prod) return;
+    const qty = parseInt(editQuantity, 10);
+    if (isNaN(qty) || qty <= 0) return;
+    const existingIndex = editCart.findIndex(i => i.productId === prod.id);
+    const currentQty = existingIndex !== -1 ? editCart[existingIndex].quantity : 0;
+    if (currentQty + qty > prod.stock) {
+      showToast(`Stokta sadece ${prod.stock} adet var.`, "warning");
+      return;
+    }
+    if (existingIndex !== -1) {
+      const updated = [...editCart];
+      updated[existingIndex].quantity += qty;
+      updated[existingIndex].total = updated[existingIndex].quantity * prod.price;
+      setEditCart(updated);
+    } else {
+      setEditCart([...editCart, {
+        productId: prod.id,
+        productName: prod.name,
+        productCode: prod.code,
+        quantity: qty,
+        price: prod.price,
+        taxRate: prod.taxRate ?? 20,
+        total: qty * prod.price
+      }]);
+    }
+    setEditSelectedProductId("");
+    setEditQuantity(1);
+    setEditProdSearch("");
+  };
+
+  const handleEditRemoveFromCart = (idx) => {
+    setEditCart(editCart.filter((_, i) => i !== idx));
+  };
+
+  const handleResubmit = async () => {
+    if (editCart.length === 0) {
+      showToast("Sepet boş olamaz.", "warning");
+      return;
+    }
+    setEditSubmitting(true);
+    try {
+      await resubmitSale(editSale.id, editCart, editNotes, editDiscount, user.uid, user.displayName, user.role);
+      showToast(`${editSale.receiptNo} numaralı satış tekrar muhasebe onayına gönderildi.`, "success");
+      setShowEditModal(false);
+      fetchInitialData();
+    } catch (err) {
+      showToast("Hata: " + err.message, "error");
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   // --- FİNANSAL TOPLAMLAR ---
@@ -345,7 +440,7 @@ const Sales = () => {
       newErrors.phone = "Telefon 10 veya 11 haneli rakam olmalıdır.";
     }
     
-    if (newCustomer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomer.email)) {
+    if (newCustomer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newCustomer.email)) {
       newErrors.email = "Geçersiz e-posta formatı.";
     }
     
@@ -384,16 +479,24 @@ const Sales = () => {
   };
 
   // Arama filtresine göre ürünleri getir
-  const filteredProducts = products.filter(p => 
+  const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(prodSearch.toLowerCase()) ||
-    p.code.toLowerCase().includes(prodSearch.toLowerCase())
+    p.code.toLowerCase().includes(prodSearch.toLowerCase()) ||
+    (p.barcode && p.barcode.toLowerCase().includes(prodSearch.toLowerCase()))
   );
 
   if (!user) return null;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem" }} className="grid-cols-2 animate-fade">
-      
+
+      {showScanner && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
       {/* SOL TARAF: Satış Formu ve Sepet */}
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="print-hidden">
         
@@ -525,7 +628,7 @@ const Sales = () => {
                     Tutar {sortField === "netAmount" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
                   </th>
                   <th style={{ textAlign: "center" }}>Durum</th>
-                  <th style={{ width: "80px", textAlign: "center" }}>Yazdır</th>
+                  <th style={{ width: "120px", textAlign: "center" }}>İşlem</th>
                 </tr>
               </thead>
               <tbody>
@@ -558,19 +661,33 @@ const Sales = () => {
                         </span>
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-icon btn-sm"
-                          onClick={() => {
-                            setLastCreatedSale(sale);
-                            setShowReceiptModal(true);
-                          }}
-                          title="Bilgi Fişini Yazdır"
-                          style={{ padding: "0.35rem" }}
-                          aria-label="Bilgi Fişini Yazdır"
-                        >
-                          <Printer size={14} />
-                        </button>
+                        <div style={{ display: "flex", gap: "0.35rem", justifyContent: "center" }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-icon btn-sm"
+                            onClick={() => {
+                              setLastCreatedSale(sale);
+                              setShowReceiptModal(true);
+                            }}
+                            title="Bilgi Fişini Yazdır"
+                            style={{ padding: "0.35rem" }}
+                            aria-label="Bilgi Fişini Yazdır"
+                          >
+                            <Printer size={14} />
+                          </button>
+                          {sale.status === "rejected" && (
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={() => handleOpenEditModal(sale)}
+                              title="Düzenle & Tekrar Gönder"
+                              style={{ padding: "0.35rem 0.5rem", backgroundColor: "var(--warning-light)", color: "var(--warning-hover)", border: "1px solid var(--warning-hover)" }}
+                              aria-label="Düzenle ve Tekrar Gönder"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -589,19 +706,37 @@ const Sales = () => {
           <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Ürün Ekle</h3>
           
           <div className="form-group">
-            <label className="form-label">Ürün Arama (Kod veya İsim)</label>
-            <div style={{ position: "relative" }}>
-              <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
-                <Search size={16} />
-              </span>
-              <input 
-                type="text"
-                className="form-control"
-                style={{ paddingLeft: "2.25rem" }}
-                placeholder="Örn: Monitör..."
-                value={prodSearch}
-                onChange={(e) => setProdSearch(e.target.value)}
-              />
+            <label className="form-label">Ürün Arama (Kod, İsim veya Barkod)</label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div style={{ position: "relative", flex: 1 }}>
+                <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
+                  <Search size={16} />
+                </span>
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{ paddingLeft: "2.25rem" }}
+                  placeholder="Örn: Monitör veya barkod numarası..."
+                  value={prodSearch}
+                  onChange={(e) => setProdSearch(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScanner(true)}
+                title="Kamera ile barkod okut"
+                style={{
+                  padding: "0 0.85rem",
+                  borderRadius: "var(--radius-sm)",
+                  border: "1px solid var(--border-color)",
+                  backgroundColor: "var(--bg-secondary)",
+                  color: "var(--primary)",
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center"
+                }}
+              >
+                <ScanLine size={20} />
+              </button>
             </div>
           </div>
 
@@ -688,7 +823,7 @@ const Sales = () => {
               <span style={{ fontWeight: 600 }}>{totalBeforeTaxAndDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "var(--text-secondary)" }}>Toplam KDV (%20)</span>
+              <span style={{ color: "var(--text-secondary)" }}>Toplam KDV</span>
               <span style={{ fontWeight: 600 }}>{taxAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
             </div>
             
@@ -718,14 +853,16 @@ const Sales = () => {
 
           <div className="form-group">
             <label className="form-label">Sipariş Notları</label>
-            <textarea 
+            <textarea
               className="form-control"
               rows="2"
+              maxLength={500}
               placeholder="Fatura, teslimat vb. notlar..."
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => setNotes(e.target.value.slice(0, 500))}
               style={{ resize: "none" }}
             />
+            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "right" }}>{notes.length}/500</div>
           </div>
 
           <button 
@@ -953,7 +1090,7 @@ const Sales = () => {
               {/* Toplam Bilgileri */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "flex-end" }}>
                 <div>Ara Toplam (KDV Hariç): {lastCreatedSale.totalAmount.toFixed(2)} ₺</div>
-                <div>Toplam KDV (%20): {lastCreatedSale.taxAmount.toFixed(2)} ₺</div>
+                <div>Toplam KDV: {lastCreatedSale.taxAmount.toFixed(2)} ₺</div>
                 {lastCreatedSale.discountAmount > 0 && (
                   <div>İskonto: -{lastCreatedSale.discountAmount.toFixed(2)} ₺</div>
                 )}
@@ -992,21 +1129,31 @@ const Sales = () => {
 
             </div>
             
-            <div className="modal-footer print-hidden" style={{ borderTop: "1px solid #eee", backgroundColor: "#f8fafc" }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
+            <div className="modal-footer print-hidden" style={{ borderTop: "1px solid #eee", backgroundColor: "#f8fafc", gap: "0.5rem" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
                 onClick={() => setShowReceiptModal(false)}
               >
-                Yeni Satış Yap
+                Kapat
               </button>
-              <button 
-                type="button" 
-                className="btn btn-primary" 
+              <button
+                type="button"
+                className="btn btn-secondary"
                 onClick={handlePrintReceipt}
+                title="Tarayıcı yazdırma ekranını aç"
               >
-                <Printer size={18} />
-                <span>Yazdır / PDF Kaydet</span>
+                <Printer size={16} />
+                <span>Yazdır</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => generateInvoicePDF(lastCreatedSale)}
+                title="PDF olarak indir"
+              >
+                <Download size={16} />
+                <span>PDF İndir</span>
               </button>
             </div>
           </div>
@@ -1067,6 +1214,160 @@ const Sales = () => {
           }
         }
       `}</style>
+
+      {/* --- REDDEDİLEN SATIŞ DÜZENLEME MODALI --- */}
+      {showEditModal && editSale && (() => {
+        const editTotalAmount = editCart.reduce((s, i) => s + i.total, 0);
+        const editTaxAmount = editCart.reduce((s, i) => s + (i.total * (i.taxRate / (100 + i.taxRate))), 0);
+        const editNetAmount = Math.max(0, editTotalAmount - editDiscount);
+        const filteredEditProducts = products.filter(p =>
+          p.name.toLowerCase().includes(editProdSearch.toLowerCase()) ||
+          p.code.toLowerCase().includes(editProdSearch.toLowerCase()) ||
+          (p.barcode && p.barcode.toLowerCase().includes(editProdSearch.toLowerCase()))
+        );
+        return (
+          <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowEditModal(false); }}>
+            <div className="modal-content animate-slide-up" style={{ maxWidth: "680px", maxHeight: "90vh", overflowY: "auto" }} role="dialog" aria-modal="true">
+              <div className="modal-header">
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Edit3 size={18} /> {editSale.receiptNo} — Satışı Düzenle & Tekrar Gönder
+                </h3>
+                <button onClick={() => setShowEditModal(false)} style={{ cursor: "pointer", fontSize: "1.25rem" }} aria-label="Kapat">&times;</button>
+              </div>
+              <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+
+                {/* Müşteri bilgisi (değiştirilemez) */}
+                <div style={{ padding: "0.75rem 1rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", fontSize: "0.85rem" }}>
+                  <span style={{ color: "var(--text-muted)" }}>Müşteri: </span>
+                  <strong>{editSale.customerCompany} ({editSale.customerName})</strong>
+                </div>
+
+                {/* Sepet */}
+                <div>
+                  <h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.75rem" }}>Sepet</h4>
+                  <div className="table-container">
+                    <table className="table" style={{ fontSize: "0.85rem" }}>
+                      <thead>
+                        <tr>
+                          <th>Ürün</th>
+                          <th style={{ textAlign: "right" }}>B. Fiyat</th>
+                          <th style={{ textAlign: "center" }}>Miktar</th>
+                          <th style={{ textAlign: "right" }}>Toplam</th>
+                          <th style={{ width: "40px" }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editCart.length === 0 ? (
+                          <tr><td colSpan="5" style={{ textAlign: "center", color: "var(--text-muted)", padding: "1.5rem" }}>Sepet boş</td></tr>
+                        ) : (
+                          editCart.map((item, idx) => (
+                            <tr key={idx}>
+                              <td>
+                                <div style={{ fontWeight: 600 }}>{item.productName}</div>
+                                <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{item.productCode}</div>
+                              </td>
+                              <td style={{ textAlign: "right" }}>{item.price.toFixed(2)} ₺</td>
+                              <td style={{ textAlign: "center" }}>
+                                <input
+                                  type="number" min="1"
+                                  className="form-control"
+                                  style={{ width: "65px", padding: "0.2rem 0.4rem", textAlign: "center" }}
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const qty = Math.max(1, parseInt(e.target.value) || 1);
+                                    const updated = [...editCart];
+                                    updated[idx] = { ...updated[idx], quantity: qty, total: qty * updated[idx].price };
+                                    setEditCart(updated);
+                                  }}
+                                />
+                              </td>
+                              <td style={{ textAlign: "right", fontWeight: 600 }}>{item.total.toFixed(2)} ₺</td>
+                              <td>
+                                <button type="button" onClick={() => handleEditRemoveFromCart(idx)} style={{ color: "var(--danger)", cursor: "pointer" }}>
+                                  <Trash2 size={15} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Ürün ekleme */}
+                <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+                  <div className="form-group" style={{ flex: 2, margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: "0.8rem" }}>Ürün Ara & Ekle</label>
+                    <input
+                      className="form-control"
+                      placeholder="İsim veya kod..."
+                      value={editProdSearch}
+                      onChange={e => setEditProdSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group" style={{ flex: 2, margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: "0.8rem" }}>Ürün</label>
+                    <select className="form-control" value={editSelectedProductId} onChange={e => setEditSelectedProductId(e.target.value)}>
+                      <option value="">-- Seç --</option>
+                      {filteredEditProducts.map(p => (
+                        <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                          {p.name} (Stok: {p.stock})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ width: "80px", margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: "0.8rem" }}>Miktar</label>
+                    <input type="number" min="1" className="form-control" value={editQuantity}
+                      onChange={e => setEditQuantity(Math.max(1, parseInt(e.target.value) || 1))} />
+                  </div>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleEditAddToCart} disabled={!editSelectedProductId} style={{ marginBottom: "1px" }}>
+                    <Plus size={16} />
+                  </button>
+                </div>
+
+                {/* Notlar & İndirim */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="form-group">
+                    <label className="form-label">Sipariş Notları</label>
+                    <textarea className="form-control" rows={2} value={editNotes}
+                      onChange={e => setEditNotes(e.target.value.slice(0, 500))} style={{ resize: "none" }} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">İndirim (₺)</label>
+                    <input type="number" min="0" className="form-control" value={editDiscount}
+                      onChange={e => setEditDiscount(Math.max(0, parseFloat(e.target.value) || 0))} />
+                    <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Toplam KDV</span>
+                        <span>{editTaxAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+                        <span>Net Toplam</span>
+                        <span style={{ color: "var(--primary)", fontSize: "1rem" }}>{editNetAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>İptal</button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleResubmit}
+                  disabled={editSubmitting || editCart.length === 0}
+                  style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+                >
+                  <RefreshCw size={16} />
+                  <span>{editSubmitting ? "Gönderiliyor..." : "Tekrar Muhasebe Onayına Gönder"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

@@ -3,19 +3,20 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { 
-  LayoutDashboard, 
-  ShoppingBag, 
-  CheckSquare, 
-  Package, 
-  History, 
-  Settings, 
+import {
+  LayoutDashboard,
+  ShoppingBag,
+  CheckSquare,
+  Package,
+  History,
+  Settings,
   LogOut,
   Sun,
   Moon,
   ChevronLeft,
   ChevronRight,
-  User
+  User,
+  Users
 } from "lucide-react";
 
 const Sidebar = ({ onOpenProfile }) => {
@@ -45,6 +46,7 @@ const Sidebar = ({ onOpenProfile }) => {
   } else if (user.role === "sales") {
     menuItems.push(
       { path: "/sales", label: "Satış Paneli", icon: ShoppingBag },
+      { path: "/customers", label: "Müşteriler", icon: Users },
       { path: "/inventory", label: "Ürün & Stok", icon: Package }
     );
   } else if (user.role === "accounting") {

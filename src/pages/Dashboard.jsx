@@ -1,16 +1,24 @@
 // Takip Sistemi - Yönetici Paneli (Dashboard)
 import React, { useState, useEffect } from "react";
 import { getSales, getProducts } from "../services/db";
-import { 
-  TrendingUp, 
-  Package, 
-  CheckSquare, 
-  DollarSign, 
-  AlertTriangle, 
+import {
+  AreaChart, Area,
+  BarChart, Bar,
+  PieChart, Pie, Cell,
+  ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend
+} from "recharts";
+import {
+  TrendingUp,
+  Package,
+  CheckSquare,
+  DollarSign,
+  AlertTriangle,
   Award,
   Calendar,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Percent
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -18,7 +26,6 @@ const Dashboard = () => {
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredPoint, setHoveredPoint] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -63,6 +70,17 @@ const Dashboard = () => {
   // Toplam Ciro (Net Tutar üzerinden)
   const totalRevenue = approvedSales.reduce((sum, s) => sum + (s.netAmount || 0), 0);
 
+  // Brüt Kar Hesabı (maliyet fiyatı olan ürünler üzerinden)
+  const grossProfit = approvedSales.reduce((sum, s) => {
+    const saleProfit = (s.items || []).reduce((itemSum, item) => {
+      const cost = (item.costPrice ?? 0) * (item.quantity || 0);
+      return itemSum + ((item.total || 0) - cost);
+    }, 0);
+    return sum + saleProfit;
+  }, 0);
+  const hasCostData = approvedSales.some(s => (s.items || []).some(i => (i.costPrice ?? 0) > 0));
+  const profitMarginPct = totalRevenue > 0 && hasCostData ? (grossProfit / totalRevenue * 100) : null;
+
   // Günlük, Haftalık, Aylık Satışlar
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -98,11 +116,17 @@ const Dashboard = () => {
             name: item.productName,
             code: item.productCode,
             quantity: 0,
-            revenue: 0
+            revenue: 0,
+            profit: 0,
+            hasCost: false
           };
         }
         productSalesMap[item.productId].quantity += (item.quantity || 0);
         productSalesMap[item.productId].revenue += (item.total || 0);
+        if ((item.costPrice ?? 0) > 0) {
+          productSalesMap[item.productId].profit += (item.total || 0) - (item.costPrice * item.quantity);
+          productSalesMap[item.productId].hasCost = true;
+        }
       });
     }
   });
@@ -167,13 +191,12 @@ const Dashboard = () => {
         })
         .reduce((sum, s) => sum + (s.netAmount || 0), 0);
 
-      trend.push({ label: dateString, value: dayTotal });
+      trend.push({ label: dateString, ciro: dayTotal });
     }
     return trend;
   };
 
   const trendData = getSalesTrendData();
-  const maxTrendVal = Math.max(...trendData.map(t => t.value), 1000);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
@@ -233,6 +256,34 @@ const Dashboard = () => {
         </Link>
       </section>
 
+      {/* 1b. Kar Marjı Kartı (maliyet verisi varsa göster) */}
+      {hasCostData && (
+        <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }} className="grid-cols-2">
+          <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--success-light)", color: "var(--success)" }}>
+              <TrendingUp size={24} />
+            </div>
+            <div>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Toplam Brüt Kar</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem", color: grossProfit >= 0 ? "var(--success)" : "var(--danger)" }}>
+                {grossProfit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+              </div>
+            </div>
+          </div>
+          <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: profitMarginPct >= 20 ? "var(--success-light)" : profitMarginPct >= 10 ? "var(--warning-light)" : "var(--danger-light)", color: profitMarginPct >= 20 ? "var(--success)" : profitMarginPct >= 10 ? "var(--warning-hover)" : "var(--danger)" }}>
+              <Percent size={24} />
+            </div>
+            <div>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Ortalama Kar Marjı</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>
+                %{profitMarginPct?.toFixed(1) ?? "—"}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* 2. Ciro Raporu Karşılaştırma Panel */}
       <section className="card" style={{ padding: "1.5rem" }}>
         <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -263,115 +314,32 @@ const Dashboard = () => {
 
       {/* 3. Grafik ve Performans Bölümü */}
       <section style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem" }} className="grid-cols-2">
-        
-        {/* Satış Trend Grafiği (SVG) */}
+
+        {/* Satış Trend Grafiği (Recharts AreaChart) */}
         <div className="card" style={{ display: "flex", flexDirection: "column" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <TrendingUp size={18} />
-            <span>Son 7 Günlük Satış Grafiği</span>
+            <span>Son 7 Günlük Satış Trendi</span>
           </h3>
-          <div style={{ flex: 1, position: "relative", minHeight: "220px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", padding: "0 1rem" }}>
-            {/* SVG Grafik Gövdesi */}
-            <svg 
-              viewBox="0 0 500 200" 
-              style={{
-                width: "100%",
-                height: "100%",
-                overflow: "visible",
-                position: "absolute",
-                inset: 0
-              }}
-            >
-              {/* Kılavuz çizgileri */}
-              <line x1="40" y1="20" x2="480" y2="20" stroke="var(--border-color)" strokeWidth="0.5" strokeDasharray="3" />
-              <line x1="40" y1="80" x2="480" y2="80" stroke="var(--border-color)" strokeWidth="0.5" strokeDasharray="3" />
-              <line x1="40" y1="140" x2="480" y2="140" stroke="var(--border-color)" strokeWidth="0.5" strokeDasharray="3" />
-              <line x1="40" y1="170" x2="480" y2="170" stroke="var(--border-color)" strokeWidth="1" />
-
-              {/* Grafik Eğrisi */}
-              <path
-                fill="none"
-                stroke="var(--primary)"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d={trendData.map((d, index) => {
-                  const x = 40 + (index * 70);
-                  const y = 170 - ((d.value / maxTrendVal) * 140);
-                  return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-                }).join(" ")}
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={trendData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="ciroGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={48} />
+              <Tooltip
+                formatter={(v) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, "Ciro"]}
+                contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.85rem" }}
+                labelStyle={{ fontWeight: 700, color: "var(--text-primary)" }}
               />
-
-              {/* Alt Alan Boyama */}
-              <path
-                fill="var(--primary-light)"
-                opacity="0.3"
-                d={`${trendData.map((d, index) => {
-                  const x = 40 + (index * 70);
-                  const y = 170 - ((d.value / maxTrendVal) * 140);
-                  return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-                }).join(" ")} L 460 170 L 40 170 Z`}
-              />
-
-              {/* Veri Noktaları (Circles) */}
-              {trendData.map((d, index) => {
-                const x = 40 + (index * 70);
-                const y = 170 - ((d.value / maxTrendVal) * 140);
-                return (
-                  <g key={index}>
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={hoveredPoint?.index === index ? "8" : "5"}
-                      fill={hoveredPoint?.index === index ? "var(--warning)" : "var(--bg-secondary)"}
-                      stroke={hoveredPoint?.index === index ? "var(--warning)" : "var(--primary)"}
-                      strokeWidth="2.5"
-                      style={{ cursor: "pointer", transition: "all var(--transition-fast)" }}
-                      onMouseEnter={() => setHoveredPoint({ x, y, label: d.label, value: d.value, index })}
-                      onMouseLeave={() => setHoveredPoint(null)}
-                    />
-                    {/* Gün Etiketleri */}
-                    <text
-                      x={x}
-                      y="188"
-                      textAnchor="middle"
-                      fill="var(--text-secondary)"
-                      fontSize="9.5"
-                      fontWeight="500"
-                    >
-                      {d.label}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Etkileşimli Hover Tooltip */}
-              {hoveredPoint && (
-                <g style={{ pointerEvents: "none" }}>
-                  <rect
-                    x={hoveredPoint.x - 65}
-                    y={hoveredPoint.y - 36}
-                    width="130"
-                    height="24"
-                    rx="4"
-                    fill="var(--bg-secondary)"
-                    stroke="var(--warning)"
-                    strokeWidth="1.5"
-                  />
-                  <text
-                    x={hoveredPoint.x}
-                    y={hoveredPoint.y - 21}
-                    textAnchor="middle"
-                    fill="var(--text-primary)"
-                    fontSize="9.5"
-                    fontWeight="700"
-                  >
-                    {hoveredPoint.value.toLocaleString('tr-TR')} ₺
-                  </text>
-                </g>
-              )}
-            </svg>
-          </div>
+              <Area type="monotone" dataKey="ciro" stroke="#2563eb" strokeWidth={2.5} fill="url(#ciroGrad)" dot={{ r: 4, fill: "#2563eb", strokeWidth: 0 }} activeDot={{ r: 6, fill: "#f59e0b" }} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
 
         {/* Satışçı Performansı */}
@@ -421,44 +389,61 @@ const Dashboard = () => {
       </section>
 
       {/* 3.5 Kategori Bazlı Satış Dağılımı */}
-      <section className="card">
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <Package size={18} />
-          <span>Kategori Bazlı Satış Dağılımı</span>
-        </h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {categorySales.length === 0 ? (
-            <div style={{ color: "var(--text-muted)", fontSize: "0.9rem", textAlign: "center", padding: "1.5rem" }}>
-              Kategori bazlı satış verisi bulunmuyor.
+      {categorySales.length > 0 && (() => {
+        const PIE_COLORS = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316"];
+        return (
+          <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }} className="grid-cols-2">
+            {/* Bar Chart */}
+            <div className="card">
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Package size={18} /><span>Kategori Bazlı Ciro</span>
+              </h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={categorySales} margin={{ top: 4, right: 16, left: 0, bottom: 32 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} angle={-25} textAnchor="end" interval={0} />
+                  <YAxis tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 10, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={44} />
+                  <Tooltip
+                    formatter={(v) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, "Ciro"]}
+                    contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}
+                  />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {categorySales.map((_, idx) => <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          ) : (
-            categorySales.map((cat, idx) => {
-              const percent = (cat.value / maxCatVal) * 100;
-              return (
-                <div key={idx} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{cat.name}</span>
-                    <span style={{ fontWeight: 700, color: "var(--warning)" }}>
-                      {cat.value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-                    </span>
-                  </div>
-                  <div style={{ height: "10px", width: "100%", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
-                    <div 
-                      style={{ 
-                        height: "100%", 
-                        width: `${percent}%`, 
-                        backgroundColor: "var(--warning)", 
-                        borderRadius: "var(--radius-full)",
-                        transition: "width 1s ease"
-                      }}
+
+            {/* Pie Chart */}
+            <div className="card" style={{ display: "flex", flexDirection: "column" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Package size={18} /><span>Kategori Pay Dağılımı</span>
+              </h3>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem", flex: 1 }}>
+                <ResponsiveContainer width="55%" height={200}>
+                  <PieChart>
+                    <Pie data={categorySales} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={40}>
+                      {categorySales.map((_, idx) => <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`]}
+                      contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}
                     />
-                  </div>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", flex: 1, minWidth: 0 }}>
+                  {categorySales.map((cat, idx) => (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem" }}>
+                      <div style={{ width: 10, height: 10, borderRadius: "2px", backgroundColor: PIE_COLORS[idx % PIE_COLORS.length], flexShrink: 0 }} />
+                      <span style={{ color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.name}</span>
+                    </div>
+                  ))}
                 </div>
-              );
-            })
-          )}
-        </div>
-      </section>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* 4. En Çok Satanlar & Son Bekleyenler */}
       <section className="grid-cols-2">
@@ -475,13 +460,14 @@ const Dashboard = () => {
                 <tr>
                   <th>Ürün Bilgisi</th>
                   <th style={{ textAlign: "center" }}>Adet</th>
-                  <th style={{ textAlign: "right" }}>Toplam Ciro</th>
+                  <th style={{ textAlign: "right" }}>Ciro</th>
+                  <th style={{ textAlign: "right" }}>Brüt Kar</th>
                 </tr>
               </thead>
               <tbody>
                 {topSellingProducts.length === 0 ? (
                   <tr>
-                    <td colSpan="3" style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                    <td colSpan="4" style={{ textAlign: "center", color: "var(--text-muted)" }}>
                       Satış kaydı bulunamadı.
                     </td>
                   </tr>
@@ -495,6 +481,9 @@ const Dashboard = () => {
                       <td style={{ textAlign: "center", fontWeight: 600 }}>{p.quantity} Adet</td>
                       <td style={{ textAlign: "right", fontWeight: 700, color: "var(--success)" }}>
                         {p.revenue.toLocaleString('tr-TR')} ₺
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: p.hasCost ? (p.profit >= 0 ? "var(--success)" : "var(--danger)") : "var(--text-muted)", fontSize: "0.85rem" }}>
+                        {p.hasCost ? `${p.profit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺` : "—"}
                       </td>
                     </tr>
                   ))

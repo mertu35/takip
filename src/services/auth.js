@@ -65,7 +65,7 @@ export const login = async (email, password) => {
       return {
         uid: userCredential.user.uid,
         email: userCredential.user.email,
-        ...userDoc.data()
+        ...(userDoc.data() || {})
       };
     } else {
       // Eğer Firestore'da profil yoksa varsayılan olarak satıcı rolü ver (ya da hata ver)
@@ -84,10 +84,8 @@ export const login = async (email, password) => {
       throw new Error("Hesabınız devre dışı bırakılmıştır!");
     }
     
-    // Test şifresi kontrolü (kullanıcı rolüne göre şifre: 'admin123', 'satis123', 'muhasebe123') veya tanımlanan özel şifre
-    const expectedPassword = foundUser.password || (foundUser.role + "123");
-    const isMasterBypass = import.meta.env.DEV && password === "123456";
-    if (password !== expectedPassword && !isMasterBypass) {
+    const expectedPassword = foundUser.password;
+    if (!expectedPassword || password !== expectedPassword) {
       throw new Error("Hatalı şifre! Lütfen şifrenizi kontrol edin.");
     }
     
@@ -208,17 +206,18 @@ export const registerUser = async (email, password, displayName, role, currentUs
       email,
       displayName,
       role,
-      password,
+      password, // Mock modda kimlik doğrulama için gerekli (Firebase Auth yerine)
       createdAt: new Date().toISOString()
     };
     users.push(newUser);
-    // Quota-safe yazma için try/catch (ileride setLocalUsers helper'ı eklenebilir)
     try {
       localStorage.setItem("takip_users", JSON.stringify(users));
     } catch (e) {
       throw new Error("Kullanıcı kaydedilemedi: LocalStorage kotası dolu olabilir.");
     }
-    return newUser;
+    // Şifreyi dönüş objesine dahil etme
+    const { password: _pwd, ...safeUser } = newUser;
+    return safeUser;
   }
 };
 

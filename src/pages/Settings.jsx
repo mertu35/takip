@@ -129,8 +129,8 @@ const SettingsPage = () => {
       // Kullanıcı adı girildiyse ve @ içermiyorsa otomatik email formatına çevir
       const email = userForm.email.includes("@") ? userForm.email : `${userForm.email.trim().toLowerCase()}@takip.com`;
 
-      // Eğer şifre girilmediyse varsayılan olarak rol+123 yap, girildiyse girileni kullan
-      const password = userForm.password ? userForm.password.trim() : (userForm.role + "123");
+      // Şifre girilmediyse rastgele 10 karakterli şifre üret
+      const password = userForm.password ? userForm.password.trim() : Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6).toUpperCase();
       
       if (userForm.password && userForm.password.length < 6) {
         throw new Error("Belirttiğiniz şifre en az 6 karakter olmalıdır!");
@@ -138,7 +138,7 @@ const SettingsPage = () => {
 
       await registerUser(email, password, userForm.displayName, userForm.role, currentUser);
       
-      setUserSuccess(`Kullanıcı başarıyla oluşturuldu! Şifre: ${password}`);
+      setUserSuccess(`Kullanıcı başarıyla oluşturuldu! Kullanıcıya giriş bilgilerini güvenli şekilde iletiniz.`);
       setUserForm({ displayName: "", email: "", role: "sales", password: "" });
       
       // Kullanıcı listesini yenile
@@ -395,12 +395,13 @@ const SettingsPage = () => {
             </div>
             <div className="form-group">
               <label className="form-label">Giriş Şifresi</label>
-              <input 
-                type="text" 
+              <input
+                type="password"
                 className="form-control"
-                placeholder="Boş bırakılırsa otomatik atanır (örn: sales123)"
+                placeholder="Boş bırakılırsa rastgele şifre atanır"
                 value={userForm.password}
                 onChange={(e) => setUserForm({...userForm, password: e.target.value})}
+                autoComplete="new-password"
               />
             </div>
 

@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Sales from "./pages/Sales";
+import Customers from "./pages/Customers";
 import Accounting from "./pages/Accounting";
 import Inventory from "./pages/Inventory";
 import Logs from "./pages/Logs";
@@ -66,6 +67,17 @@ function App() {
                 <ProtectedRoute allowedRoles={["sales"]}>
                   <Layout>
                     <Sales />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/customers"
+              element={
+                <ProtectedRoute allowedRoles={["sales", "admin"]}>
+                  <Layout>
+                    <Customers />
                   </Layout>
                 </ProtectedRoute>
               }

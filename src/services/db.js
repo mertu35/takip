@@ -259,13 +259,41 @@ export const deleteProduct = async (productId, currentUserId, currentUserName, c
 };
 
 // --- SATIŞ (SALES) SERVISLERI ---
-export const getSales = async () => {
+export const getSales = async (role, userId) => {
   if (isFirebaseActive) {
-    const q = query(collection(firestore, "sales"), orderBy("date", "desc"));
+    let q;
+    if (role === "sales" && userId) {
+      // Satışçı sadece kendi satışlarını okuyabilir; composite index gerektirmemesi için orderBy yok, JS'de sıralıyoruz
+      q = query(collection(firestore, "sales"), where("salespersonId", "==", userId));
+    } else {
+      q = query(collection(firestore, "sales"), orderBy("date", "desc"));
+    }
     const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (role === "sales") {
+      docs.sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
+    return docs;
   } else {
-    return getLocalData("takip_sales").sort((a, b) => new Date(b.date) - new Date(a.date));
+    const all = getLocalData("takip_sales").sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (role === "sales" && userId) {
+      return all.filter(s => s.salespersonId === userId);
+    }
+    return all;
+  }
+};
+
+export const getSalesByCustomer = async (customerId) => {
+  if (isFirebaseActive) {
+    const q = query(collection(firestore, "sales"), where("customerId", "==", customerId));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    docs.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return docs;
+  } else {
+    return getLocalData("takip_sales")
+      .filter(s => s.customerId === customerId)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
   }
 };
 
@@ -291,9 +319,7 @@ export const addSale = async (saleData, currentUserId, currentUserName, currentU
         const nextNum = lastNum + 1;
         const receiptNo = prefix + String(nextNum).padStart(5, "0");
 
-        // 2. Ürünlerin stok yeterliliğini kontrol et (sadece kontrol, düşürme yok)
-        // Stok düşürme işlemi muhasebeci onayladığında processApproval içinde yapılır.
-        // İş kuralı: muhasebeci depoda çalışmaz, sadece evrak işlemi yapar.
+        // 2. Stok kontrolü + düşürme (satış anında atomik)
         for (const item of saleData.items) {
           const pDocRef = doc(firestore, "products", item.productId);
           const pDoc = await transaction.get(pDocRef);
@@ -306,6 +332,7 @@ export const addSale = async (saleData, currentUserId, currentUserName, currentU
           if (currentStock < item.quantity) {
             throw new Error(`Yetersiz stok: ${item.productName} (Mevcut: ${currentStock} ${pDoc.data().unit || 'Adet'}, İstenen: ${item.quantity} ${item.unit || 'Adet'})`);
           }
+          transaction.update(pDocRef, { stock: currentStock - item.quantity });
         }
 
         // 3. Sayaç güncelle
@@ -324,7 +351,6 @@ export const addSale = async (saleData, currentUserId, currentUserName, currentU
         };
 
         transaction.set(newSaleDocRef, finalSale);
-        // Not: Stok düşürme burada YAPILMAZ - muhasebeci onayladığında processApproval'da yapılacak.
       });
 
       await addLog(currentUserId, currentUserName, currentUserRole, "CREATE_SALE", `${finalSale.receiptNo} numaralı satış fişi oluşturuldu (Tutar: ${finalSale.netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL).`);
@@ -337,7 +363,7 @@ export const addSale = async (saleData, currentUserId, currentUserName, currentU
     // Yerel Mock Modu
     const sales = getLocalData("takip_sales");
 
-    // 1. Stok kontrolü yap (sadece yeterlilik - düşme yok)
+    // 1. Stok kontrolü + düşürme (satış anında)
     const products = getLocalData("takip_products");
     for (const item of saleData.items) {
       const prod = products.find(p => p.id === item.productId);
@@ -348,6 +374,11 @@ export const addSale = async (saleData, currentUserId, currentUserName, currentU
         throw new Error(`Yetersiz stok: ${item.productName} (Mevcut: ${prod.stock} ${prod.unit || 'Adet'}, İstenen: ${item.quantity} ${item.unit || 'Adet'})`);
       }
     }
+    for (const item of saleData.items) {
+      const pIdx = products.findIndex(p => p.id === item.productId);
+      if (pIdx !== -1) products[pIdx].stock -= item.quantity;
+    }
+    setLocalData("takip_products", products);
 
     // 2. Fiş numarasını çakışmasız hesapla (race condition korumalı)
     const matchSales = sales.filter(s => s.receiptNo && s.receiptNo.startsWith(prefix));
@@ -433,50 +464,29 @@ export const processApproval = async (saleId, status, notes, isMicroProcessed, c
   if (isFirebaseActive) {
     const docRef = doc(firestore, "sales", saleId);
 
-    if (status === "approved") {
-      // Onay anında stok düşürme transaction'ı (atomik: kontrol + düş + status update)
-      await runTransaction(firestore, async (transaction) => {
-        const saleDoc = await transaction.get(docRef);
-        if (!saleDoc.exists()) {
-          throw new Error("Satış kaydı bulunamadı!");
-        }
+    await runTransaction(firestore, async (transaction) => {
+      const saleDoc = await transaction.get(docRef);
+      if (!saleDoc.exists()) throw new Error("Satış kaydı bulunamadı!");
 
-        const currentSale = saleDoc.data();
-        // İdempotent kontrol: zaten işlenmiş satışı tekrar işleme
-        if (currentSale.status !== "pending_accounting") {
-          throw new Error(`Bu satış zaten işlenmiş! (Mevcut durum: ${currentSale.status})`);
-        }
+      const currentSale = saleDoc.data();
+      if (currentSale.status !== "pending_accounting") {
+        throw new Error(`Bu satış zaten işlenmiş! (Mevcut durum: ${currentSale.status})`);
+      }
 
-        // Her ürün için stoğu kontrol et ve düş
+      if (status === "rejected") {
+        // Red: stok satış anında düşmüştü, geri ekle
         for (const item of currentSale.items || []) {
           const pDocRef = doc(firestore, "products", item.productId);
           const pDoc = await transaction.get(pDocRef);
-          if (!pDoc.exists()) {
-            throw new Error(`Ürün bulunamadı: ${item.productName}`);
+          if (pDoc.exists()) {
+            transaction.update(pDocRef, { stock: (pDoc.data().stock || 0) + item.quantity });
           }
-          const currentStock = pDoc.data().stock || 0;
-          const newStock = currentStock - item.quantity;
-          if (newStock < 0) {
-            throw new Error(`Yetersiz stok: ${item.productName} (Mevcut: ${currentStock} ${pDoc.data().unit || 'Adet'}, İstenen: ${item.quantity} ${item.unit || 'Adet'})`);
-          }
-          transaction.update(pDocRef, { stock: newStock });
         }
+      }
+      // Onayda stok zaten satış anında düşmüştü, değişiklik yok
 
-        // Satış durumunu güncelle
-        transaction.update(docRef, approvalData);
-      });
-    } else {
-      // Red durumunda idempotent kontrol + sadece durum güncelleme
-      // (stok zaten düşmemişti, geri almaya gerek yok)
-      const saleDocCheck = await getDoc(docRef);
-      if (!saleDocCheck.exists()) {
-        throw new Error("Satış kaydı bulunamadı!");
-      }
-      if (saleDocCheck.data().status !== "pending_accounting") {
-        throw new Error(`Bu satış zaten işlenmiş! (Mevcut durum: ${saleDocCheck.data().status})`);
-      }
-      await updateDoc(docRef, approvalData);
-    }
+      transaction.update(docRef, approvalData);
+    });
 
     await addDoc(collection(firestore, "approvals"), {
       saleId,
@@ -490,9 +500,20 @@ export const processApproval = async (saleId, status, notes, isMicroProcessed, c
     const actionType = status === "approved" ? "APPROVE_SALE" : "REJECT_SALE";
     const detailMsg = status === "approved"
       ? `${saleId} ID'li satış onaylandı. (Mikro'ya işlendi: ${isMicroProcessed ? "Evet" : "Hayır"})`
-      : `${saleId} ID'li satış reddedildi. Nedeni: ${notes}`;
+      : `${saleId} ID'li satış reddedildi, stok iade edildi. Nedeni: ${notes}`;
 
     await addLog(currentUserId, currentUserName, currentUserRole, actionType, detailMsg);
+
+    // Satışçıya bildirim gönder
+    const saleSnap = await getDoc(docRef);
+    if (saleSnap.exists()) {
+      const saleData = saleSnap.data();
+      const notifMsg = status === "approved"
+        ? `${saleData.receiptNo || saleId} numaralı satışınız onaylandı.`
+        : `${saleData.receiptNo || saleId} numaralı satışınız reddedildi. Neden: ${notes}`;
+      await addNotification(saleData.salespersonId, notifMsg, status === "approved" ? "success" : "error", { saleId, receiptNo: saleData.receiptNo });
+    }
+
     return { id: saleId, ...approvalData };
   } else {
     // Yerel Mock Modu
@@ -508,31 +529,16 @@ export const processApproval = async (saleId, status, notes, isMicroProcessed, c
       throw new Error(`Bu satış zaten işlenmiş! (Mevcut durum: ${oldSale.status})`);
     }
 
-    // Onay durumunda stok düş (sıralı: önce kontrol, sonra düş)
-    if (status === "approved") {
+    if (status === "rejected") {
+      // Red: stok satış anında düşmüştü, geri ekle
       const products = getLocalData("takip_products");
-
-      // 1. Stok kontrolü
-      for (const item of oldSale.items || []) {
-        const prod = products.find(p => p.id === item.productId);
-        if (!prod) {
-          throw new Error(`Ürün bulunamadı: ${item.productName}`);
-        }
-        if (prod.stock < item.quantity) {
-          throw new Error(`Yetersiz stok: ${item.productName} (Mevcut: ${prod.stock} ${prod.unit || 'Adet'}, İstenen: ${item.quantity} ${item.unit || 'Adet'})`);
-        }
-      }
-
-      // 2. Stok düş
       for (const item of oldSale.items || []) {
         const pIdx = products.findIndex(p => p.id === item.productId);
-        if (pIdx !== -1) {
-          products[pIdx].stock -= item.quantity;
-        }
+        if (pIdx !== -1) products[pIdx].stock += item.quantity;
       }
       setLocalData("takip_products", products);
     }
-    // Red durumunda stok zaten düşmemişti, hiçbir şey yapma
+    // Onayda stok zaten satış anında düşmüştü, değişiklik yok
 
     // Satış durumunu güncelle
     sales[idx] = {
@@ -560,10 +566,175 @@ export const processApproval = async (saleId, status, notes, isMicroProcessed, c
     const actionType = status === "approved" ? "APPROVE_SALE" : "REJECT_SALE";
     const detailMsg = status === "approved"
       ? `${oldSale.receiptNo} numaralı satış onaylandı. (Mikro'ya işlendi: ${isMicroProcessed ? "Evet" : "Hayır"})`
-      : `${oldSale.receiptNo} numaralı satış reddedildi. Nedeni: ${notes}`;
+      : `${oldSale.receiptNo} numaralı satış reddedildi, stok iade edildi. Nedeni: ${notes}`;
 
     await addLog(currentUserId, currentUserName, currentUserRole, actionType, detailMsg);
+
+    // Satışçıya bildirim gönder
+    const notifMsg = status === "approved"
+      ? `${oldSale.receiptNo} numaralı satışınız onaylandı.`
+      : `${oldSale.receiptNo} numaralı satışınız reddedildi. Neden: ${notes}`;
+    await addNotification(oldSale.salespersonId, notifMsg, status === "approved" ? "success" : "error", { saleId, receiptNo: oldSale.receiptNo });
+
     return sales[idx];
+  }
+};
+
+// Reddedilen satışı düzenleyip tekrar gönderme
+// İş kuralı: Red anında stok iade edilmişti. Tekrar gönderimde stok yeniden düşürülür.
+export const resubmitSale = async (saleId, updatedItems, updatedNotes, updatedDiscount, currentUserId, currentUserName, currentUserRole) => {
+  if (isFirebaseActive) {
+    const docRef = doc(firestore, "sales", saleId);
+
+    let finalSale;
+    await runTransaction(firestore, async (transaction) => {
+      const saleDoc = await transaction.get(docRef);
+      if (!saleDoc.exists()) throw new Error("Satış kaydı bulunamadı!");
+
+      const currentSale = saleDoc.data();
+      if (currentSale.status !== "rejected") {
+        throw new Error("Sadece reddedilmiş satışlar yeniden gönderilebilir!");
+      }
+
+      // Stok kontrolü + düşürme
+      for (const item of updatedItems) {
+        const pDocRef = doc(firestore, "products", item.productId);
+        const pDoc = await transaction.get(pDocRef);
+        if (!pDoc.exists()) throw new Error(`Ürün bulunamadı: ${item.productName}`);
+        const currentStock = pDoc.data().stock || 0;
+        if (currentStock < item.quantity) {
+          throw new Error(`Yetersiz stok: ${item.productName} (Mevcut: ${currentStock}, İstenen: ${item.quantity})`);
+        }
+        transaction.update(pDocRef, { stock: currentStock - item.quantity });
+      }
+
+      // Toplamları yeniden hesapla
+      const totalAmount = updatedItems.reduce((s, i) => s + i.total, 0);
+      const taxAmount = updatedItems.reduce((s, i) => s + (i.total * (i.taxRate / (100 + i.taxRate))), 0);
+      const netAmount = Math.max(0, totalAmount - updatedDiscount);
+
+      finalSale = {
+        items: updatedItems,
+        notes: updatedNotes,
+        discountAmount: updatedDiscount,
+        totalAmount,
+        taxAmount,
+        netAmount,
+        status: "pending_accounting",
+        accountingProcessed: false,
+        processedAt: null,
+        processedBy: null,
+        resubmittedAt: new Date().toISOString(),
+        resubmittedBy: currentUserName
+      };
+
+      transaction.update(docRef, finalSale);
+    });
+
+    await addLog(currentUserId, currentUserName, currentUserRole, "RESUBMIT_SALE", `${saleId} ID'li reddedilen satış düzenlenerek tekrar gönderildi.`);
+    return { id: saleId, ...finalSale };
+  } else {
+    const sales = getLocalData("takip_sales");
+    const idx = sales.findIndex(s => s.id === saleId);
+    if (idx === -1) throw new Error("Satış kaydı bulunamadı!");
+
+    const oldSale = sales[idx];
+    if (oldSale.status !== "rejected") throw new Error("Sadece reddedilmiş satışlar yeniden gönderilebilir!");
+
+    // Stok kontrolü + düşürme
+    const products = getLocalData("takip_products");
+    for (const item of updatedItems) {
+      const prod = products.find(p => p.id === item.productId);
+      if (!prod) throw new Error(`Ürün bulunamadı: ${item.productName}`);
+      if (prod.stock < item.quantity) {
+        throw new Error(`Yetersiz stok: ${item.productName} (Mevcut: ${prod.stock}, İstenen: ${item.quantity})`);
+      }
+    }
+    for (const item of updatedItems) {
+      const pIdx = products.findIndex(p => p.id === item.productId);
+      if (pIdx !== -1) products[pIdx].stock -= item.quantity;
+    }
+    setLocalData("takip_products", products);
+
+    const totalAmount = updatedItems.reduce((s, i) => s + i.total, 0);
+    const taxAmount = updatedItems.reduce((s, i) => s + (i.total * (i.taxRate / (100 + i.taxRate))), 0);
+    const netAmount = Math.max(0, totalAmount - updatedDiscount);
+
+    sales[idx] = {
+      ...oldSale,
+      items: updatedItems,
+      notes: updatedNotes,
+      discountAmount: updatedDiscount,
+      totalAmount,
+      taxAmount,
+      netAmount,
+      status: "pending_accounting",
+      accountingProcessed: false,
+      processedAt: null,
+      processedBy: null,
+      resubmittedAt: new Date().toISOString(),
+      resubmittedBy: currentUserName
+    };
+    setLocalData("takip_sales", sales);
+
+    await addLog(currentUserId, currentUserName, currentUserRole, "RESUBMIT_SALE", `${oldSale.receiptNo} numaralı reddedilen satış düzenlenerek tekrar gönderildi.`);
+    return sales[idx];
+  }
+};
+
+// --- BİLDİRİM (NOTIFICATIONS) SERVİSLERİ ---
+export const addNotification = async (userId, message, type = "info", meta = {}) => {
+  const notification = {
+    userId,
+    message,
+    type, // "info" | "warning" | "success" | "error"
+    read: false,
+    createdAt: new Date().toISOString(),
+    ...meta
+  };
+  if (isFirebaseActive) {
+    try {
+      await addDoc(collection(firestore, "notifications"), notification);
+    } catch (e) {
+      console.error("Bildirim kaydedilemedi:", e);
+    }
+  } else {
+    const notifications = getLocalData("takip_notifications");
+    notifications.unshift({ id: "notif-" + Math.random().toString(36).substr(2, 9), ...notification });
+    setLocalData("takip_notifications", notifications.slice(0, 200));
+  }
+};
+
+export const getNotifications = async (userId) => {
+  if (isFirebaseActive) {
+    const q = query(
+      collection(firestore, "notifications"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } else {
+    const all = getLocalData("takip_notifications");
+    return all.filter(n => n.userId === userId).slice(0, 50);
+  }
+};
+
+export const markNotificationsRead = async (userId) => {
+  if (isFirebaseActive) {
+    const q = query(
+      collection(firestore, "notifications"),
+      where("userId", "==", userId),
+      where("read", "==", false)
+    );
+    const snap = await getDocs(q);
+    const updates = snap.docs.map(d => updateDoc(d.ref, { read: true }));
+    await Promise.all(updates);
+  } else {
+    const all = getLocalData("takip_notifications");
+    const updated = all.map(n => n.userId === userId ? { ...n, read: true } : n);
+    setLocalData("takip_notifications", updated);
   }
 };
 
@@ -660,8 +831,9 @@ export const initializeFirebaseDatabase = async (adminEmail, adminPassword, admi
 
     // 1.5. Aynı şekilde sysadmin kullanıcısını Auth tarafında oluşturuyoruz
     let sysAdminUid;
-    const sysAdminEmail = "sysadmin@takip.com";
-    const sysAdminPassword = "sysadmin123";
+    const sysAdminEmail = import.meta.env.VITE_SEED_SYSADMIN_EMAIL || "sysadmin@takip.com";
+    const sysAdminPassword = import.meta.env.VITE_SEED_SYSADMIN_PASSWORD;
+    if (!sysAdminPassword) throw new Error("VITE_SEED_SYSADMIN_PASSWORD env değişkeni tanımlı değil!");
     try {
       const userCredential = await createUserWithEmailAndPassword(tempAuth, sysAdminEmail, sysAdminPassword);
       sysAdminUid = userCredential.user.uid;
@@ -676,8 +848,9 @@ export const initializeFirebaseDatabase = async (adminEmail, adminPassword, admi
 
     // 1.6. Satışçı kullanıcısını Auth tarafında oluşturuyoruz
     let salesUid;
-    const salesEmail = "satis@takip.com";
-    const salesPassword = "sales123";
+    const salesEmail = import.meta.env.VITE_SEED_SALES_EMAIL || "satis@takip.com";
+    const salesPassword = import.meta.env.VITE_SEED_SALES_PASSWORD;
+    if (!salesPassword) throw new Error("VITE_SEED_SALES_PASSWORD env değişkeni tanımlı değil!");
     try {
       const userCredential = await createUserWithEmailAndPassword(tempAuth, salesEmail, salesPassword);
       salesUid = userCredential.user.uid;
@@ -692,8 +865,9 @@ export const initializeFirebaseDatabase = async (adminEmail, adminPassword, admi
 
     // 1.7. Muhasebeci kullanıcısını Auth tarafında oluşturuyoruz
     let accountingUid;
-    const accountingEmail = "muhasebe@takip.com";
-    const accountingPassword = "accounting123";
+    const accountingEmail = import.meta.env.VITE_SEED_ACCOUNTING_EMAIL || "muhasebe@takip.com";
+    const accountingPassword = import.meta.env.VITE_SEED_ACCOUNTING_PASSWORD;
+    if (!accountingPassword) throw new Error("VITE_SEED_ACCOUNTING_PASSWORD env değişkeni tanımlı değil!");
     try {
       const userCredential = await createUserWithEmailAndPassword(tempAuth, accountingEmail, accountingPassword);
       accountingUid = userCredential.user.uid;

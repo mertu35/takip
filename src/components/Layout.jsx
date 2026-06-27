@@ -3,7 +3,7 @@ import Sidebar from "./Sidebar";
 import { useAuth } from "../context/AuthContext";
 import { Menu, X, Bell } from "lucide-react";
 import { useLocation } from "react-router-dom";
-import { getAnnouncements, getSales } from "../services/db";
+import { getAnnouncements, getSales, getNotifications, markNotificationsRead } from "../services/db";
 import ProfileModal from "./ProfileModal";
 
 const Layout = ({ children }) => {
@@ -13,6 +13,8 @@ const Layout = ({ children }) => {
   const [announcements, setAnnouncements] = useState([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingSales, setPendingSales] = useState([]);
+  const [userNotifications, setUserNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const location = useLocation();
 
@@ -20,21 +22,25 @@ const Layout = ({ children }) => {
     const fetchData = async () => {
       try {
         const data = await getAnnouncements();
-        const active = data.filter(a => a.active);
-        setAnnouncements(active);
-        
-        // Fetch pending sales approvals
-        const salesData = await getSales();
-        const pending = salesData.filter(s => s.status === "pending_accounting");
-        setPendingSales(pending);
-        setPendingCount(pending.length);
+        setAnnouncements(data.filter(a => a.active));
+
+        if (user.role === "sales") {
+          // Satışçı: kendi bildirimlerini göster
+          const notifs = await getNotifications(user.uid);
+          setUserNotifications(notifs);
+          setUnreadCount(notifs.filter(n => !n.read).length);
+        } else {
+          // Muhasebe/Admin: bekleyen onayları göster
+          const salesData = await getSales(user.role, user.uid);
+          const pending = salesData.filter(s => s.status === "pending_accounting");
+          setPendingSales(pending);
+          setPendingCount(pending.length);
+        }
       } catch (err) {
-        console.error("Duyuru ve bildirimler yüklenirken hata:", err);
+        console.error("Bildirimler yüklenirken hata:", err);
       }
     };
-    if (user) {
-      fetchData();
-    }
+    if (user) fetchData();
   }, [user, location.pathname]);
 
   if (!user) return children;
@@ -131,8 +137,16 @@ const Layout = ({ children }) => {
             {/* Bildirim Zili */}
             <div style={{ position: "relative" }}>
               <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                aria-label={`${pendingCount} adet onay bekleyen sipariş bildirimi`}
+                onClick={async () => {
+                  const opening = !showNotifications;
+                  setShowNotifications(opening);
+                  if (opening && user.role === "sales" && unreadCount > 0) {
+                    await markNotificationsRead(user.uid);
+                    setUnreadCount(0);
+                    setUserNotifications(prev => prev.map(n => ({ ...n, read: true })));
+                  }
+                }}
+                aria-label="Bildirimler"
                 style={{
                   cursor: "pointer",
                   color: "var(--text-secondary)",
@@ -145,8 +159,8 @@ const Layout = ({ children }) => {
                 }}
               >
                 <Bell size={20} />
-                {pendingCount > 0 && (
-                  <span 
+                {(user.role === "sales" ? unreadCount : pendingCount) > 0 && (
+                  <span
                     style={{
                       position: "absolute",
                       top: "2px",
@@ -163,25 +177,25 @@ const Layout = ({ children }) => {
                       justifyContent: "center"
                     }}
                   >
-                    {pendingCount}
+                    {user.role === "sales" ? unreadCount : pendingCount}
                   </span>
                 )}
               </button>
 
               {showNotifications && (
                 <>
-                  <div 
+                  <div
                     onClick={() => setShowNotifications(false)}
                     style={{ position: "fixed", inset: 0, zIndex: 199, background: "transparent" }}
                   />
-                  <div 
+                  <div
                     className="card animate-slide-up"
                     style={{
                       position: "absolute",
                       right: 0,
                       top: "100%",
                       marginTop: "0.5rem",
-                      width: "280px",
+                      width: "300px",
                       zIndex: 200,
                       padding: "1rem",
                       display: "flex",
@@ -191,25 +205,58 @@ const Layout = ({ children }) => {
                     }}
                   >
                     <h4 style={{ fontSize: "0.9rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                      Bekleyen Sipariş Onayları
+                      {user.role === "sales" ? "Bildirimlerim" : "Bekleyen Sipariş Onayları"}
                     </h4>
-                    <div style={{ maxHeight: "200px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      {pendingCount === 0 ? (
-                        <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "1rem 0" }}>
-                          Yeni onay bekleyen sipariş yok.
-                        </p>
+                    <div style={{ maxHeight: "240px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      {user.role === "sales" ? (
+                        userNotifications.length === 0 ? (
+                          <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "1rem 0" }}>
+                            Yeni bildiriminiz yok.
+                          </p>
+                        ) : (
+                          userNotifications.map((n, idx) => (
+                            <div key={idx} style={{
+                              fontSize: "0.8rem",
+                              borderBottom: "1px solid var(--border-color)",
+                              paddingBottom: "0.5rem",
+                              display: "flex",
+                              gap: "0.5rem",
+                              alignItems: "flex-start",
+                              opacity: n.read ? 0.65 : 1
+                            }}>
+                              <span style={{
+                                width: "8px",
+                                height: "8px",
+                                borderRadius: "50%",
+                                backgroundColor: n.type === "success" ? "var(--success)" : n.type === "error" ? "var(--danger)" : "var(--primary)",
+                                flexShrink: 0,
+                                marginTop: "4px"
+                              }} />
+                              <div>
+                                <div style={{ color: "var(--text-primary)", lineHeight: 1.4 }}>{n.message}</div>
+                                <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
+                                  {new Date(n.createdAt).toLocaleString("tr-TR")}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )
                       ) : (
-                        pendingSales.map((s, idx) => (
-                          <div key={idx} style={{ fontSize: "0.8rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                            <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{s.receiptNo}</div>
-                            <div style={{ color: "var(--text-secondary)", marginTop: "0.15rem" }}>
-                              {s.customerCompany}
+                        pendingCount === 0 ? (
+                          <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "1rem 0" }}>
+                            Yeni onay bekleyen sipariş yok.
+                          </p>
+                        ) : (
+                          pendingSales.map((s, idx) => (
+                            <div key={idx} style={{ fontSize: "0.8rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
+                              <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{s.receiptNo}</div>
+                              <div style={{ color: "var(--text-secondary)", marginTop: "0.15rem" }}>{s.customerCompany}</div>
+                              <div style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 600, marginTop: "0.15rem" }}>
+                                Net Tutar: {s.netAmount.toLocaleString("tr-TR")} ₺
+                              </div>
                             </div>
-                            <div style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 600, marginTop: "0.15rem" }}>
-                              Net Tutar: {s.netAmount.toLocaleString('tr-TR')} ₺
-                            </div>
-                          </div>
-                        ))
+                          ))
+                        )
                       )}
                     </div>
                   </div>
