@@ -1,0 +1,88 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Kullanıcının rolünü çeken yardımcı fonksiyon
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    // Giriş yapılıp yapılmadığını kontrol eden yardımcı fonksiyon
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // --- USERS KOLEKSİYONU ---
+    match /users/{userId} {
+      // Herkes giriş yaptıysa profil bilgilerini okuyabilir.
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (request.auth.uid == userId || getUserRole() == 'admin' || getUserRole() == 'sysadmin');
+      allow update: if isSignedIn() && (
+        getUserRole() == 'admin' || 
+        getUserRole() == 'sysadmin' || 
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'disabled']))
+      );
+      allow delete: if isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'sysadmin');
+    }
+
+    // --- CUSTOMERS KOLEKSİYONU ---
+    match /customers/{customerId} {
+      // Tüm giriş yapan kullanıcılar okuyabilir ve yeni müşteri ekleyebilir.
+      // Düzenleme/Silme sadece yönetici ve satışçılara açık.
+      allow read, create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'sales');
+    }
+
+    // --- PRODUCTS & CATEGORIES KOLEKSİYONU ---
+    match /products/{productId} {
+      // Tüm giriş yapan çalışanlar okuyabilir. Sadece admin ve sysadmin ekleyebilir/güncelleyebilir/silebilir.
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'sysadmin');
+    }
+
+    match /categories/{categoryId} {
+      // Tüm giriş yapan çalışanlar okuyabilir. Sadece admin ve sysadmin ekleyebilir/güncelleyebilir/silebilir.
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'sysadmin');
+    }
+
+    // --- SALES KOLEKSİYONU ---
+    match /sales/{saleId} {
+      // Tüm giriş yapanlar okuyabilir.
+      // Satışçılar sadece 'pending_accounting' durumunda satış oluşturabilir/düzenleyebilir.
+      // Muhasebeciler ve Yöneticiler her şeyi güncelleyebilir (onaylama işlemleri için).
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (getUserRole() == 'sales' || getUserRole() == 'admin' || getUserRole() == 'sysadmin');
+      allow update: if isSignedIn() && (
+        getUserRole() == 'admin' || 
+        getUserRole() == 'sysadmin' || 
+        getUserRole() == 'accounting' || 
+        (getUserRole() == 'sales' && resource.data.status == 'pending_accounting')
+      );
+      allow delete: if isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'sysadmin');
+    }
+
+    // --- APPROVALS KOLEKSİYONU ---
+    match /approvals/{approvalId} {
+      // Muhasebeciler ve yöneticiler onay kaydı ekleyebilir ve okuyabilir.
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'accounting' || getUserRole() == 'sysadmin');
+    }
+
+    // --- LOGS KOLEKSİYONU ---
+    match /logs/{logId} {
+      // Tüm kullanıcılar yazabilir (loglama yapmak için). Sadece admin ve sysadmin okuyabilir.
+      allow read: if isSignedIn() && (getUserRole() == 'admin' || getUserRole() == 'sysadmin');
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Loglar güncellenemez veya silinemez (Audit trail bütünlüğü)
+    }
+
+    // --- ANNOUNCEMENTS KOLEKSİYONU ---
+    match /announcements/{announcementId} {
+      // Herkes duyuruları okuyabilir. Sadece sysadmin ekleyip silebilir.
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && getUserRole() == 'sysadmin';
+    }
+  }
+}

@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Giriş yapılıp yapılmadığını kontrol eden yardımcı fonksiyon
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Fişler ve fatura PDF'leri için kurallar
+    match /receipts/{allPaths=**} {
+      // Giriş yapan her çalışan fişleri okuyabilir
+      allow read: if isSignedIn();
+      // Satışçılar ve yöneticiler yeni fiş yükleyebilir
+      allow write: if isSignedIn();
+    }
+  }
+}

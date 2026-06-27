@@ -1,0 +1,638 @@
+// Takip Sistemi - Ürün ve Stok Yönetimi (Inventory)
+import React, { useState, useEffect } from "react";
+import { 
+  getProducts, 
+  getCategories, 
+  addProduct, 
+  updateProduct, 
+  deleteProduct, 
+  addCategory 
+} from "../services/db";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { 
+  Plus, 
+  Edit, 
+  Trash2, 
+  Search, 
+  AlertTriangle, 
+  FolderPlus
+} from "lucide-react";
+
+const Inventory = () => {
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  
+  // Data States
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Sorting and Validation States
+  const [sortField, setSortField] = useState("name");
+  const [sortOrder, setSortOrder] = useState("asc");
+  const [errors, setErrors] = useState({});
+
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [filterCriticalOnly, setFilterCriticalOnly] = useState(false);
+
+  // Modals States
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [modalMode, setModalMode] = useState("add"); // "add" | "edit"
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [productForm, setProductForm] = useState({
+    code: "", name: "", categoryId: "", price: 0, stock: 0, criticalStock: 5, unit: "Adet"
+  });
+
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ name: "", description: "" });
+
+  useEffect(() => {
+    fetchInventoryData();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowProductModal(false);
+        setShowCategoryModal(false);
+      }
+    };
+    if (showProductModal || showCategoryModal) {
+      window.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "unset";
+    };
+  }, [showProductModal, showCategoryModal]);
+
+  const handleOverlayClick = (e, closeFn) => {
+    if (e.target.className === "modal-overlay") {
+      closeFn(false);
+    }
+  };
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const fetchInventoryData = async () => {
+    try {
+      const [prodData, catData] = await Promise.all([
+        getProducts(),
+        getCategories()
+      ]);
+      setProducts(prodData);
+      setCategories(catData);
+    } catch (err) {
+      console.error("Stok verileri yüklenirken hata:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
+        <section className="card" style={{ height: "80px" }}>
+          <div className="skeleton-row" style={{ width: "20%" }} />
+        </section>
+        <section className="card">
+          <div className="skeleton-loader-container">
+            <div className="skeleton-row title" />
+            <div className="skeleton-row" />
+            <div className="skeleton-row" />
+            <div className="skeleton-row" />
+            <div className="skeleton-row" />
+            <div className="skeleton-row" />
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  // --- ÜRÜN CRUD İŞLEMLERİ ---
+  const handleOpenAddProduct = () => {
+    setModalMode("add");
+    setProductForm({
+      code: "",
+      name: "",
+      categoryId: categories[0]?.id || "",
+      price: 0,
+      stock: 0,
+      criticalStock: 5,
+      unit: "Adet"
+    });
+    setErrors({});
+    setShowProductModal(true);
+  };
+
+  const handleOpenEditProduct = (prod) => {
+    setModalMode("edit");
+    setSelectedProductId(prod.id);
+    setProductForm({
+      code: prod.code,
+      name: prod.name,
+      categoryId: prod.categoryId,
+      price: prod.price,
+      stock: prod.stock,
+      criticalStock: prod.criticalStock,
+      unit: prod.unit || "Adet"
+    });
+    setErrors({});
+    setShowProductModal(true);
+  };
+
+  const handleProductSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validasyon
+    const newErrors = {};
+    if (!productForm.code.trim()) {
+      newErrors.code = "Ürün kodu boş bırakılamaz.";
+    } else if (productForm.code.trim().length < 3) {
+      newErrors.code = "Ürün kodu en az 3 karakter olmalıdır.";
+    }
+    
+    if (!productForm.name.trim()) {
+      newErrors.name = "Ürün adı boş bırakılamaz.";
+    }
+    
+    if (parseFloat(productForm.price) < 0) {
+      newErrors.price = "Birim fiyat negatif olamaz.";
+    }
+    
+    if (parseInt(productForm.stock) < 0) {
+      newErrors.stock = "Mevcut stok miktarı negatif olamaz.";
+    }
+    
+    if (parseInt(productForm.criticalStock) < 0) {
+      newErrors.criticalStock = "Kritik limit negatif olamaz.";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showToast("Lütfen form alanlarındaki hataları düzeltin.", "warning");
+      return;
+    }
+
+    // Kategori ismini bul
+    const cat = categories.find(c => c.id === productForm.categoryId);
+    const categoryName = cat ? cat.name : "Kategorisiz";
+
+    const payload = {
+      ...productForm,
+      price: parseFloat(productForm.price) || 0,
+      stock: parseInt(productForm.stock, 10) || 0,
+      criticalStock: parseInt(productForm.criticalStock, 10) || 0,
+      categoryName
+    };
+
+    try {
+      if (modalMode === "add") {
+        await addProduct(payload, user.uid, user.displayName, user.role);
+        showToast("Ürün başarıyla eklendi.", "success");
+      } else {
+        await updateProduct(selectedProductId, payload, user.uid, user.displayName, user.role);
+        showToast("Ürün başarıyla güncellendi.", "success");
+      }
+      setShowProductModal(false);
+      fetchInventoryData();
+    } catch (err) {
+      showToast("İşlem gerçekleştirilirken hata: " + err.message, "error");
+    }
+  };
+
+  const handleDeleteProduct = async (prodId, prodName) => {
+    if (window.confirm(`"${prodName}" ürününü silmek istediğinize emin misiniz?`)) {
+      try {
+        await deleteProduct(prodId, user.uid, user.displayName, user.role);
+        showToast("Ürün başarıyla silindi.", "success");
+        fetchInventoryData();
+      } catch (err) {
+        showToast("Silinirken hata oluştu: " + err.message, "error");
+      }
+    }
+  };
+
+  // --- KATEGORİ EKLEME ---
+  const handleCategorySubmit = async (e) => {
+    e.preventDefault();
+    if (!categoryForm.name) {
+      showToast("Kategori adı zorunludur!", "warning");
+      return;
+    }
+
+    try {
+      await addCategory(categoryForm, user.uid, user.displayName, user.role);
+      showToast("Yeni Kategori başarıyla oluşturuldu.", "success");
+      setShowCategoryModal(false);
+      setCategoryForm({ name: "", description: "" });
+      fetchInventoryData();
+    } catch (err) {
+      showToast("Kategori ekleme hatası: " + err.message, "error");
+    }
+  };
+
+  // --- FİLTRELEME MANTIĞI ---
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          p.code.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCategory = selectedCategory === "all" || p.categoryId === selectedCategory;
+    
+    const matchesCritical = !filterCriticalOnly || p.stock <= p.criticalStock;
+
+    return matchesSearch && matchesCategory && matchesCritical;
+  }).sort((a, b) => {
+    let aVal = a[sortField];
+    let bVal = b[sortField];
+    
+    if (typeof aVal === "string") {
+      aVal = aVal.toLowerCase();
+      bVal = bVal.toLowerCase();
+      return sortOrder === "asc" 
+        ? aVal.localeCompare(bVal, 'tr') 
+        : bVal.localeCompare(aVal, 'tr');
+    } else {
+      return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+    }
+  });
+
+  if (!user) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
+      
+      {/* Üst İşlem Çubuğu ve Filtreler */}
+      <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        
+        {/* İşlem Butonları (Rol bazlı yetkilendirme) */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Stok Kontrol Listesi</h3>
+          
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <button 
+              className="btn btn-secondary btn-sm" 
+              onClick={() => setShowCategoryModal(true)}
+            >
+              <FolderPlus size={16} />
+              <span>Kategori Ekle</span>
+            </button>
+            <button 
+              className="btn btn-primary btn-sm" 
+              onClick={handleOpenAddProduct}
+            >
+              <Plus size={16} />
+              <span>Yeni Ürün Ekle</span>
+            </button>
+          </div>
+        </div>
+
+        <div style={{ borderBottom: "1px solid var(--border-color)", margin: "0.25rem 0" }}></div>
+
+        {/* Filtre Arayüzü */}
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "1rem" }} className="grid-cols-3">
+          {/* Metin Arama */}
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
+              <Search size={16} />
+            </span>
+            <input 
+              type="text" 
+              className="form-control"
+              style={{ paddingLeft: "2.25rem" }}
+              placeholder="Ürün adı veya barkod/kod arama..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          {/* Kategori Filtresi */}
+          <select
+            className="form-control"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            <option value="all">Tüm Kategoriler</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+
+          {/* Kritik Stok Switcher */}
+          <label style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: "0.5rem", 
+            cursor: "pointer",
+            fontWeight: 500,
+            fontSize: "0.875rem",
+            color: filterCriticalOnly ? "var(--danger)" : "var(--text-secondary)",
+            padding: "0.5rem",
+            borderRadius: "var(--radius-sm)",
+            backgroundColor: filterCriticalOnly ? "var(--danger-light)" : "transparent",
+            transition: "all var(--transition-fast)"
+          }}>
+            <input 
+              type="checkbox" 
+              checked={filterCriticalOnly} 
+              onChange={(e) => setFilterCriticalOnly(e.target.checked)}
+              style={{ width: "16px", height: "16px" }}
+            />
+            <AlertTriangle size={16} />
+            <span>Kritik Stok Uyarısı</span>
+          </label>
+        </div>
+      </section>
+
+      {/* Ürün Listesi Tablosu */}
+      <section className="card">
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th onClick={() => handleSort("code")} style={{ cursor: "pointer" }}>
+                  KOD / Barkod {sortField === "code" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th onClick={() => handleSort("name")} style={{ cursor: "pointer" }}>
+                  Ürün Adı {sortField === "name" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th onClick={() => handleSort("categoryName")} style={{ cursor: "pointer" }}>
+                  Kategori {sortField === "categoryName" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th onClick={() => handleSort("price")} style={{ textAlign: "right", cursor: "pointer" }}>
+                  Birim Fiyat {sortField === "price" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th onClick={() => handleSort("stock")} style={{ textAlign: "center", cursor: "pointer" }}>
+                  Mevcut Stok {sortField === "stock" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th onClick={() => handleSort("criticalStock")} style={{ textAlign: "center", cursor: "pointer" }}>
+                  Kritik Limit {sortField === "criticalStock" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                </th>
+                <th style={{ textAlign: "center" }}>Durum</th>
+                <th style={{ width: "100px", textAlign: "right" }}>İşlem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProducts.length === 0 ? (
+                <tr>
+                   <td colSpan="8" style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem" }}>
+                    Aranan kriterlere uygun ürün bulunamadı.
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((p) => {
+                  const isKritik = p.stock <= p.criticalStock;
+                  return (
+                    <tr key={p.id} style={{ backgroundColor: isKritik ? "rgba(239, 68, 68, 0.015)" : "transparent" }}>
+                      <td style={{ fontWeight: 600 }}>{p.code}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{p.name}</div>
+                      </td>
+                      <td>{p.categoryName}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>
+                        {p.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+                      </td>
+                      <td style={{ textAlign: "center", fontWeight: 700 }}>
+                        <span style={{ color: isKritik ? "var(--danger)" : "var(--text-primary)" }}>
+                          {p.stock} {p.unit || "Adet"}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                        {p.criticalStock} {p.unit || "Adet"}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        {isKritik ? (
+                          <span className="badge badge-danger" style={{ gap: "0.25rem", padding: "0.25rem 0.5rem" }}>
+                            <AlertTriangle size={12} />
+                            <span>Kritik</span>
+                          </span>
+                        ) : (
+                          <span className="badge badge-success">Yeterli</span>
+                        )}
+                      </td>
+                      
+                      <td>
+                        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => handleOpenEditProduct(p)}
+                            style={{ color: "var(--primary)", cursor: "pointer" }}
+                            title="Ürünü Düzenle"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(p.id, p.name)}
+                            style={{ color: "var(--danger)", cursor: "pointer" }}
+                            title="Ürünü Sil"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* --- ÜRÜN EKLEME / DÜZENLEME MODALI --- */}
+      {showProductModal && (
+        <div className="modal-overlay" onClick={(e) => handleOverlayClick(e, setShowProductModal)}>
+          <div className="modal-content animate-slide-up" style={{ maxWidth: "550px" }} role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+                {modalMode === "add" ? "Yeni Ürün Ekle" : "Ürün Düzenle"}
+              </h3>
+              <button onClick={() => setShowProductModal(false)} style={{ cursor: "pointer", fontSize: "1.25rem" }} aria-label="Kapat">&times;</button>
+            </div>
+            <form onSubmit={handleProductSubmit}>
+              <div className="modal-body">
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="form-group">
+                    <label className="form-label">Ürün Kodu / SKU</label>
+                    <input 
+                      type="text" 
+                      className={`form-control ${errors.code ? "is-invalid" : ""}`}
+                      value={productForm.code}
+                      onChange={(e) => {
+                        setProductForm({...productForm, code: e.target.value.toUpperCase()});
+                        if (errors.code) setErrors({...errors, code: null});
+                      }}
+                      placeholder="OFIS-001"
+                      required
+                    />
+                    {errors.code && <div className="invalid-feedback">{errors.code}</div>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Ürün Adı</label>
+                    <input 
+                      type="text" 
+                      className={`form-control ${errors.name ? "is-invalid" : ""}`}
+                      value={productForm.name}
+                      onChange={(e) => {
+                        setProductForm({...productForm, name: e.target.value});
+                        if (errors.name) setErrors({...errors, name: null});
+                      }}
+                      placeholder="A4 Fotokopi Kağıdı"
+                      required
+                    />
+                    {errors.name && <div className="invalid-feedback">{errors.name}</div>}
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="form-group">
+                    <label className="form-label">Kategori</label>
+                    <select 
+                      className="form-control"
+                      value={productForm.categoryId}
+                      onChange={(e) => setProductForm({...productForm, categoryId: e.target.value})}
+                      required
+                    >
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Birim</label>
+                    <select 
+                      className="form-control"
+                      value={productForm.unit}
+                      onChange={(e) => setProductForm({...productForm, unit: e.target.value})}
+                    >
+                      <option value="Adet">Adet</option>
+                      <option value="Kg">Kg</option>
+                      <option value="Litre">Litre</option>
+                      <option value="Metre">Metre</option>
+                      <option value="Kutu">Kutu</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: "1rem" }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">Birim Fiyat (KDV Hariç ₺)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      className={`form-control ${errors.price ? "is-invalid" : ""}`}
+                      value={productForm.price}
+                      onChange={(e) => {
+                        setProductForm({...productForm, price: e.target.value});
+                        if (errors.price) setErrors({...errors, price: null});
+                      }}
+                      required
+                    />
+                    {errors.price && <div className="invalid-feedback">{errors.price}</div>}
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="form-group">
+                    <label className="form-label">Mevcut Stok</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      className={`form-control ${errors.stock ? "is-invalid" : ""}`}
+                      value={productForm.stock}
+                      onChange={(e) => {
+                        setProductForm({...productForm, stock: e.target.value});
+                        if (errors.stock) setErrors({...errors, stock: null});
+                      }}
+                      required
+                    />
+                    {errors.stock && <div className="invalid-feedback">{errors.stock}</div>}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Kritik Stok Sınırı</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      className={`form-control ${errors.criticalStock ? "is-invalid" : ""}`}
+                      value={productForm.criticalStock}
+                      onChange={(e) => {
+                        setProductForm({...productForm, criticalStock: e.target.value});
+                        if (errors.criticalStock) setErrors({...errors, criticalStock: null});
+                      }}
+                      required
+                    />
+                    {errors.criticalStock && <div className="invalid-feedback">{errors.criticalStock}</div>}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowProductModal(false)}>İptal</button>
+                <button type="submit" className="btn btn-primary">Kaydet</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- KATEGORİ EKLEME MODALI --- */}
+      {showCategoryModal && (
+        <div className="modal-overlay" onClick={(e) => handleOverlayClick(e, setShowCategoryModal)}>
+          <div className="modal-content animate-slide-up" style={{ maxWidth: "450px" }} role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Yeni Kategori Ekle</h3>
+              <button onClick={() => setShowCategoryModal(false)} style={{ cursor: "pointer", fontSize: "1.25rem" }} aria-label="Kapat">&times;</button>
+            </div>
+            <form onSubmit={handleCategorySubmit}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Kategori Adı</label>
+                  <input 
+                    type="text" 
+                    className="form-control"
+                    placeholder="e.g. Kırtasiye"
+                    value={categoryForm.name}
+                    onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Açıklama</label>
+                  <textarea 
+                    className="form-control"
+                    rows="3"
+                    placeholder="Kategori kapsamı hakkında kısa açıklama..."
+                    value={categoryForm.description}
+                    onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
+                    style={{ resize: "none" }}
+                  />
+                </div>
+              </div>
+              
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCategoryModal(false)}>İptal</button>
+                <button type="submit" className="btn btn-primary">Kaydet</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+export default Inventory;
