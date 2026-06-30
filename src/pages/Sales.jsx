@@ -1199,55 +1199,33 @@ const Sales = () => {
       {/* Yazdırma Modu CSS'i */}
       <style>{`
         @media print {
-          /* Yazdırılmayacak öğeleri gizliyoruz */
-          .print-hidden, 
-          .sidebar-container, 
-          .app-header, 
-          .app-announcement,
-          header, 
-          aside,
-          .modal-header,
-          .modal-footer {
-            display: none !important;
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background-color: #ffffff !important;
           }
           
-          /* Modalin gri arka planını yazıcı için kaldırıp tam sayfa yapıyoruz */
-          .modal-overlay {
+          /* Tüm ekran elemanlarını gizle */
+          body * {
+            visibility: hidden;
+          }
+          
+          /* Sadece fiş alanını ve alt elemanlarını görünür yap */
+          .print-area, .print-area * {
+            visibility: visible;
+          }
+          
+          /* Fiş alanını sayfanın sol üstüne sabitle */
+          .print-area {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 100% !important;
-            height: auto !important;
-            background: none !important;
-            backdrop-filter: none !important;
-            display: block !important;
-            z-index: auto !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          
-          .modal-content {
-            border: none !important;
-            box-shadow: none !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            background: #ffffff !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          .main-content {
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          /* Fiş içeriğini tam sayfa ve siyah font yapıyoruz */
-          .print-area {
             width: 80mm !important;
-            margin: 0 auto !important;
+            margin: 0 !important;
             padding: 10px !important;
             background-color: #ffffff !important;
             color: #000000 !important;
+            box-sizing: border-box !important;
           }
         }
       `}</style>
