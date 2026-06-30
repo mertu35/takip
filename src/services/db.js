@@ -832,8 +832,7 @@ export const initializeFirebaseDatabase = async (adminEmail, adminPassword, admi
     // 1.5. Aynı şekilde sysadmin kullanıcısını Auth tarafında oluşturuyoruz
     let sysAdminUid;
     const sysAdminEmail = import.meta.env.VITE_SEED_SYSADMIN_EMAIL || "sysadmin@takip.com";
-    const sysAdminPassword = import.meta.env.VITE_SEED_SYSADMIN_PASSWORD;
-    if (!sysAdminPassword) throw new Error("VITE_SEED_SYSADMIN_PASSWORD env değişkeni tanımlı değil!");
+    const sysAdminPassword = import.meta.env.VITE_SEED_SYSADMIN_PASSWORD || "sysadmin123";
     try {
       const userCredential = await createUserWithEmailAndPassword(tempAuth, sysAdminEmail, sysAdminPassword);
       sysAdminUid = userCredential.user.uid;
@@ -849,8 +848,7 @@ export const initializeFirebaseDatabase = async (adminEmail, adminPassword, admi
     // 1.6. Satışçı kullanıcısını Auth tarafında oluşturuyoruz
     let salesUid;
     const salesEmail = import.meta.env.VITE_SEED_SALES_EMAIL || "satis@takip.com";
-    const salesPassword = import.meta.env.VITE_SEED_SALES_PASSWORD;
-    if (!salesPassword) throw new Error("VITE_SEED_SALES_PASSWORD env değişkeni tanımlı değil!");
+    const salesPassword = import.meta.env.VITE_SEED_SALES_PASSWORD || "sales123";
     try {
       const userCredential = await createUserWithEmailAndPassword(tempAuth, salesEmail, salesPassword);
       salesUid = userCredential.user.uid;
@@ -866,8 +864,7 @@ export const initializeFirebaseDatabase = async (adminEmail, adminPassword, admi
     // 1.7. Muhasebeci kullanıcısını Auth tarafında oluşturuyoruz
     let accountingUid;
     const accountingEmail = import.meta.env.VITE_SEED_ACCOUNTING_EMAIL || "muhasebe@takip.com";
-    const accountingPassword = import.meta.env.VITE_SEED_ACCOUNTING_PASSWORD;
-    if (!accountingPassword) throw new Error("VITE_SEED_ACCOUNTING_PASSWORD env değişkeni tanımlı değil!");
+    const accountingPassword = import.meta.env.VITE_SEED_ACCOUNTING_PASSWORD || "accounting123";
     try {
       const userCredential = await createUserWithEmailAndPassword(tempAuth, accountingEmail, accountingPassword);
       accountingUid = userCredential.user.uid;

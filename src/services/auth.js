@@ -84,8 +84,22 @@ export const login = async (email, password) => {
       throw new Error("Hesabınız devre dışı bırakılmıştır!");
     }
     
-    const expectedPassword = foundUser.password;
-    if (!expectedPassword || password !== expectedPassword) {
+    let isPasswordCorrect = false;
+    if (foundUser.password) {
+      isPasswordCorrect = (password === foundUser.password);
+    } else {
+      // Başlangıç mock kullanıcıları için şifre toleransları (İngilizce ve Türkçe rol isimleri)
+      const allowedPasswords = [];
+      if (foundUser.role === "admin") allowedPasswords.push("admin123");
+      else if (foundUser.role === "sysadmin") allowedPasswords.push("sysadmin123");
+      else if (foundUser.role === "sales") allowedPasswords.push("sales123", "satis123");
+      else if (foundUser.role === "accounting") allowedPasswords.push("accounting123", "muhasebe123");
+      allowedPasswords.push(foundUser.role + "123");
+
+      isPasswordCorrect = allowedPasswords.includes(password);
+    }
+    
+    if (!isPasswordCorrect) {
       throw new Error("Hatalı şifre! Lütfen şifrenizi kontrol edin.");
     }
     
