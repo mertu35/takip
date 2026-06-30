@@ -1203,6 +1203,7 @@ const Sales = () => {
           .print-hidden, 
           .sidebar-container, 
           .app-header, 
+          .app-announcement,
           header, 
           aside,
           .modal-header,
