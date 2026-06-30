@@ -112,6 +112,7 @@ const Sales = () => {
   const [products, setProducts] = useState([]);
   const [salesHistory, setSalesHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   // Sorting and Validation States
   const [sortField, setSortField] = useState("date");
@@ -378,6 +379,8 @@ const Sales = () => {
   // --- SATIŞ KAYDI OLUŞTURMA ---
   const handleCreateSaleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
     if (!selectedCustomerId) {
       showToast("Lütfen bir müşteri seçin.", "warning");
       return;
@@ -390,9 +393,11 @@ const Sales = () => {
     const customer = customers.find(c => c.id === selectedCustomerId);
     if (!customer) return;
 
+    setSubmitting(true);
+
     const saleData = {
-      salespersonId: user.uid,
-      salespersonName: user.displayName,
+      salespersonId: user?.uid,
+      salespersonName: user?.displayName,
       customerId: customer.id,
       customerName: customer.name,
       customerCompany: customer.company,
@@ -405,7 +410,7 @@ const Sales = () => {
     };
 
     try {
-      const createdSale = await addSale(saleData, user.uid, user.displayName, user.role);
+      const createdSale = await addSale(saleData, user?.uid, user?.displayName, user?.role);
       setLastCreatedSale(createdSale);
       setShowReceiptModal(true);
       
@@ -420,6 +425,8 @@ const Sales = () => {
       showToast("Satış kaydı başarıyla oluşturuldu.", "success");
     } catch (error) {
       showToast("Satış kaydı oluşturulurken bir hata meydana geldi: " + error.message, "error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -448,14 +455,18 @@ const Sales = () => {
       newErrors.taxNumber = "Vergi numarası 10 haneli rakam olmalıdır.";
     }
 
+    if (submitting) return;
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       showToast("Lütfen form alanlarındaki hataları düzeltin.", "warning");
       return;
     }
 
+    setSubmitting(true);
+
     try {
-      const created = await addCustomer(newCustomer, user.uid, user.displayName, user.role);
+      const created = await addCustomer(newCustomer, user?.uid, user?.displayName, user?.role);
       showToast("Yeni müşteri başarıyla eklendi.", "success");
       // Müşteri listesini yenile ve yeni müşteriyi seç
       const updatedCustomers = await getCustomers();
@@ -470,6 +481,8 @@ const Sales = () => {
       });
     } catch (err) {
       showToast("Müşteri eklenirken hata: " + err.message, "error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -869,11 +882,34 @@ const Sales = () => {
             type="button"
             className="btn btn-success"
             onClick={handleCreateSaleSubmit}
-            style={{ width: "100%", height: "48px" }}
-            disabled={cart.length === 0 || !selectedCustomerId}
+            style={{ 
+              width: "100%", 
+              height: "48px", 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center", 
+              gap: "0.5rem" 
+            }}
+            disabled={cart.length === 0 || !selectedCustomerId || submitting}
           >
-            <FileText size={18} />
-            <span>Satış Kaydını Gönder</span>
+            {submitting ? (
+              <>
+                <div className="spinner-loader" style={{
+                  width: "18px",
+                  height: "18px",
+                  border: "2px solid rgba(255,255,255,0.3)",
+                  borderTopColor: "#fff",
+                  borderRadius: "50%",
+                  animation: "spin 0.8s infinite linear"
+                }}></div>
+                <span>Gönderiliyor...</span>
+              </>
+            ) : (
+              <>
+                <FileText size={18} />
+                <span>Satış Kaydını Gönder</span>
+              </>
+            )}
           </button>
           
           <div style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.75rem" }}>
@@ -998,8 +1034,8 @@ const Sales = () => {
               </div>
               
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowCustomerModal(false)}>İptal</button>
-                <button type="submit" className="btn btn-primary">Kaydet</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCustomerModal(false)} disabled={submitting}>İptal</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? "Kaydediliyor..." : "Kaydet"}</button>
               </div>
             </form>
           </div>
