@@ -11,7 +11,9 @@ Sistem, modern SPA (Single Page Application) standartlarına göre tasarlanmış
 - **Frontend**: React 19 (Vite tabanlı, HMR destekli)
 - **Tasarım & Arayüz**: Vanilla CSS (CSS Variables, Açık/Karanlık tema geçişi, Cam Morfizmleri, Responsive Tasarım)
 - **İkon Seti**: Lucide React
-- **Raporlama**: XLSX (Excel dışa aktarımı için)
+- **Raporlama & Çıktı**: XLSX (Excel dışa aktarımı) ve jsPDF (Türkçe karakter destekli Proforma/Fatura PDF indirme)
+- **Barkod Okuma**: @zxing/browser ile mobil/masaüstü kamera destekli barkod tarayıcı
+- **Grafikler**: Recharts (Dashboard ciro ve satış analiz grafikleri)
 - **Veritabanı ve Auth**: Firebase (Authentication, Firestore, Storage, Hosting) veya Firebase ayarları olmadığında **%100 Yerel Simülasyon (LocalStorage) Modu**.
 
 ---
