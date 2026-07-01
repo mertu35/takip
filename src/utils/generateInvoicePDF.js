@@ -20,24 +20,34 @@ const tr = (text) =>
 const fmt = (num) =>
   (num || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }) + " TL";
 
-export const generateInvoicePDF = (sale) => {
+export const generateInvoicePDF = (sale, companyProfile) => {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const margin = 18;
 
   // ─── HEADER ────────────────────────────────────────────────────────────────
   // Şirket adı
+  const companyName = tr(companyProfile?.companyName || "OZKON CELIK");
+  const address = tr(companyProfile?.address || "Merkez Mah. Celik Sanayi Bulvari No: 45 Sarıyer / Istanbul");
+  const phone = companyProfile?.phone || "0212 999 88 77";
+  const fax = companyProfile?.fax;
+  const taxOffice = tr(companyProfile?.taxOffice || "Maslak");
+  const taxNumber = companyProfile?.taxNumber || "6540987654";
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(15, 82, 186);
-  doc.text("OZKON CELIK", margin, 22);
+  doc.text(companyName, margin, 22);
 
   // Şirket bilgileri
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text("Merkez Mah. Celik Sanayi Bulvari No: 45 Sarıyer / Istanbul", margin, 28);
-  doc.text("Tel: 0212 999 88 77  |  VD: Maslak  |  VN: 654 098 7654", margin, 32.5);
+  doc.text(address, margin, 28);
+  
+  const telFaxText = `Tel: ${phone}${fax ? `  |  Faks: ${fax}` : ""}`;
+  const vdVnText = `VD: ${taxOffice}  |  VN: ${taxNumber}`;
+  doc.text(`${telFaxText}  |  ${vdVnText}`, margin, 32.5);
 
   // Sağ üst köşe: FATURA / FIS
   doc.setFont("helvetica", "bold");

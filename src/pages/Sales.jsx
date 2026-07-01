@@ -1,6 +1,6 @@
 // Takip Sistemi - Satışçı Modülü (Sales)
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { getCustomers, getProducts, addSale, addCustomer, getSales, resubmitSale } from "../services/db";
+import { getCustomers, getProducts, addSale, addCustomer, getSales, resubmitSale, getCompanyProfile } from "../services/db";
 import { generateInvoicePDF } from "../utils/generateInvoicePDF";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -113,6 +113,7 @@ const Sales = () => {
   const [salesHistory, setSalesHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState(null);
 
   // Sorting and Validation States
   const [sortField, setSortField] = useState("date");
@@ -205,14 +206,16 @@ const Sales = () => {
 
   const fetchInitialData = useCallback(async () => {
     try {
-      const [custData, prodData, salesData] = await Promise.all([
+      const [custData, prodData, salesData, profileData] = await Promise.all([
         getCustomers(),
         getProducts(),
-        getSales(user?.role, user?.uid)
+        getSales(user?.role, user?.uid),
+        getCompanyProfile()
       ]);
       setCustomers(custData);
       setProducts(prodData);
       setSalesHistory(salesData);
+      setCompanyProfile(profileData);
     } catch (err) {
       console.error("Satış verileri yüklenirken hata:", err);
     } finally {
@@ -1068,10 +1071,19 @@ const Sales = () => {
                     margin: "0 auto 0.75rem auto" 
                   }} 
                 />
-                <h2 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0, fontFamily: "sans-serif" }}>ÖZKON ÇELİK</h2>
-                <div style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>Merkez Mah. Çelik Sanayi Bulvarı No: 45 Sarıyer / İstanbul</div>
-                <div style={{ fontSize: "0.75rem" }}>Tel: 0212 999 88 77 | Faks: 0212 999 88 78</div>
-                <div style={{ fontSize: "0.75rem" }}>Vergi Dairesi: Maslak | Vergi No: 654 098 7654</div>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0, fontFamily: "sans-serif" }}>
+                  {companyProfile?.companyName || "ÖZKON ÇELİK"}
+                </h2>
+                <div style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>
+                  {companyProfile?.address || "Merkez Mah. Çelik Sanayi Bulvarı No: 45 Sarıyer / İstanbul"}
+                </div>
+                <div style={{ fontSize: "0.75rem" }}>
+                  {companyProfile?.phone ? `Tel: ${companyProfile.phone}` : ""} 
+                  {companyProfile?.fax ? ` | Faks: ${companyProfile.fax}` : ""}
+                </div>
+                <div style={{ fontSize: "0.75rem" }}>
+                  Vergi Dairesi: {companyProfile?.taxOffice || "Maslak"} | Vergi No: {companyProfile?.taxNumber || "6540987654"}
+                </div>
                 <div style={{ margin: "0.5rem 0", borderBottom: "1px dashed #000" }}></div>
                 <h4 style={{ margin: 0, fontWeight: 700 }}>SATIS FİSİ (PROFORMA)</h4>
               </div>
@@ -1185,7 +1197,7 @@ const Sales = () => {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => generateInvoicePDF(lastCreatedSale)}
+                onClick={() => generateInvoicePDF(lastCreatedSale, companyProfile)}
                 title="PDF olarak indir"
               >
                 <Download size={16} />

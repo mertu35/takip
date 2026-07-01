@@ -1000,3 +1000,50 @@ export const deleteAnnouncement = async (annId, currentUserId, currentUserName, 
   }
   return true;
 };
+
+// --- ŞİRKET PROFİLİ SERVİSLERİ ---
+export const getCompanyProfile = async () => {
+  if (isFirebaseActive) {
+    try {
+      const docRef = doc(firestore, "settings", "company_profile");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data();
+      }
+    } catch (e) {
+      console.error("Şirket profili yüklenemedi:", e);
+    }
+  } else {
+    const profile = getLocalData("takip_company_profile");
+    if (profile) return profile;
+  }
+  
+  // Varsayılan değerler
+  return {
+    companyName: "ÖZKON ÇELİK",
+    address: "Merkez Mah. Çelik Sanayi Bulvarı No: 45 Sarıyer / İstanbul",
+    phone: "0212 999 88 77",
+    fax: "0212 999 88 78",
+    taxOffice: "Maslak",
+    taxNumber: "6540987654"
+  };
+};
+
+export const updateCompanyProfile = async (profileData, currentUserId, currentUserName, currentUserRole) => {
+  if (isFirebaseActive) {
+    const docRef = doc(firestore, "settings", "company_profile");
+    await setDoc(docRef, {
+      ...profileData,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUserName
+    }, { merge: true });
+  } else {
+    setLocalData("takip_company_profile", {
+      ...profileData,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUserName
+    });
+  }
+  await addLog(currentUserId, currentUserName, currentUserRole, "UPDATE_COMPANY_PROFILE", "Şirket profil bilgileri güncellendi.");
+  return true;
+};

@@ -1,7 +1,7 @@
 // Takip Sistemi - Sistem Ayarları Ekranı (Settings)
 import React, { useState, useEffect } from "react";
 import { registerUser, updateUserRole, deleteUser } from "../services/auth";
-import { getCustomers, getProducts, getSales, exportBackupData, importBackupData, getAnnouncements, addAnnouncement, deleteAnnouncement } from "../services/db";
+import { getCustomers, getProducts, getSales, exportBackupData, importBackupData, getAnnouncements, addAnnouncement, deleteAnnouncement, getCompanyProfile, updateCompanyProfile } from "../services/db";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { 
@@ -13,7 +13,8 @@ import {
   ShieldAlert, 
   Check, 
   UserCheck,
-  Trash2
+  Trash2,
+  Building
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { isFirebaseActive, firestore } from "../services/firebase";
@@ -72,10 +73,47 @@ const SettingsPage = () => {
   const [annForm, setAnnForm] = useState("");
   const [annLoading, setAnnLoading] = useState(false);
 
+  // Şirket Profil Bilgileri
+  const [profile, setProfile] = useState({
+    companyName: "",
+    address: "",
+    phone: "",
+    fax: "",
+    taxOffice: "",
+    taxNumber: ""
+  });
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
+
   useEffect(() => {
     fetchUsers();
     fetchAnnouncements();
+    fetchCompanyProfile();
   }, []);
+
+  const fetchCompanyProfile = async () => {
+    try {
+      const data = await getCompanyProfile();
+      setProfile(data);
+    } catch (err) {
+      console.error("Şirket profili yüklenirken hata:", err);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    setProfileSaving(true);
+    try {
+      await updateCompanyProfile(profile, currentUser.uid, currentUser.displayName, currentUser.role);
+      showToast("Şirket profil bilgileri başarıyla güncellendi.", "success");
+    } catch (err) {
+      showToast("Güncelleme sırasında hata oluştu: " + err.message, "error");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const fetchAnnouncements = async () => {
     try {
@@ -653,6 +691,108 @@ const SettingsPage = () => {
               ))
             )}
           </div>
+        </section>
+
+        {/* Şirket Profil Ayarları */}
+        <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Building size={18} />
+            <span>Şirket Profil Bilgileri</span>
+          </h3>
+          <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+            Satış fişlerinin (Proforma fatura) üst kısmında yer alacak şirket unvanı, adres, vergi dairesi ve vergi numarası gibi resmi bilgileri buradan düzenleyebilirsiniz.
+          </p>
+
+          {profileLoading ? (
+            <div style={{ textAlign: "center", padding: "1rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              Yükleniyor...
+            </div>
+          ) : (
+            <form onSubmit={handleUpdateProfile} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div className="form-group">
+                <label className="form-label">Şirket Unvanı</label>
+                <input 
+                  type="text" 
+                  className="form-control"
+                  value={profile.companyName}
+                  onChange={(e) => setProfile({ ...profile, companyName: e.target.value.toUpperCase() })}
+                  placeholder="ÖZKON ÇELİK"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Açık Adres</label>
+                <textarea 
+                  className="form-control"
+                  rows="2"
+                  value={profile.address}
+                  onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                  placeholder="Şirket adresi..."
+                  style={{ resize: "none" }}
+                  required
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div className="form-group">
+                  <label className="form-label">Telefon</label>
+                  <input 
+                    type="text" 
+                    className="form-control"
+                    value={profile.phone}
+                    onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                    placeholder="0212..."
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Faks</label>
+                  <input 
+                    type="text" 
+                    className="form-control"
+                    value={profile.fax}
+                    onChange={(e) => setProfile({ ...profile, fax: e.target.value })}
+                    placeholder="0212..."
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div className="form-group">
+                  <label className="form-label">Vergi Dairesi</label>
+                  <input 
+                    type="text" 
+                    className="form-control"
+                    value={profile.taxOffice}
+                    onChange={(e) => setProfile({ ...profile, taxOffice: e.target.value })}
+                    placeholder="Maslak"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Vergi Numarası</label>
+                  <input 
+                    type="text" 
+                    className="form-control"
+                    value={profile.taxNumber}
+                    onChange={(e) => setProfile({ ...profile, taxNumber: e.target.value.replace(/\D/g, "") })}
+                    placeholder="10 Haneli No"
+                    maxLength={10}
+                    required
+                  />
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                style={{ width: "100%", height: "40px", marginTop: "0.5rem" }}
+                disabled={profileSaving}
+              >
+                {profileSaving ? "Kaydediliyor..." : "Profil Bilgilerini Kaydet"}
+              </button>
+            </form>
+          )}
         </section>
 
       </div>
