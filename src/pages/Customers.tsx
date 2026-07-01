@@ -3,6 +3,7 @@ import { getCustomers, addCustomer, updateCustomer, deleteCustomer, getSales, ge
 import { generateInvoicePDF } from "../utils/generateInvoicePDF";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import Modal from "../components/Modal";
 import {
   UserPlus, Search, Phone, Mail, Building2, Hash, History, TrendingUp, X, Download,
   MoreVertical, Edit, Trash2, LayoutGrid, List
@@ -477,80 +478,78 @@ const Customers = () => {
         </div>
       )}
 
-      {showModal && (
-        <>
-          <div onClick={handleCloseModal} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", zIndex: 199 }} />
-          <div style={{
-            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            zIndex: 200, width: "min(520px, 95vw)", maxHeight: "90vh", overflowY: "auto"
-          }} className="card animate-slide-up">
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1.25rem" }}>
-              {editingId ? "Müşteriyi Düzenle" : "Yeni Müşteri Ekle"}
-            </h3>
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
-                <div className="form-group">
-                  <label className="form-label">Ad Soyad *</label>
-                  <input className={`form-control ${errors.name ? "is-invalid" : ""}`} value={form.name}
-                    onChange={e => { setForm({ ...form, name: e.target.value }); setErrors({ ...errors, name: null }); }}
-                    placeholder="Ahmet Yılmaz" />
-                  {errors.name && <div className="invalid-feedback">{errors.name}</div>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Firma Unvanı *</label>
-                  <input className={`form-control ${errors.company ? "is-invalid" : ""}`} value={form.company}
-                    onChange={e => { setForm({ ...form, company: e.target.value }); setErrors({ ...errors, company: null }); }}
-                    placeholder="Yılmaz Ltd. Şti." />
-                  {errors.company && <div className="invalid-feedback">{errors.company}</div>}
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
-                <div className="form-group">
-                  <label className="form-label">Telefon</label>
-                  <input className={`form-control ${errors.phone ? "is-invalid" : ""}`} value={form.phone}
-                    onChange={e => { setForm({ ...form, phone: e.target.value }); setErrors({ ...errors, phone: null }); }}
-                    placeholder="05xx xxx xx xx" />
-                  {errors.phone && <div className="invalid-feedback">{errors.phone}</div>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">E-posta</label>
-                  <input className={`form-control ${errors.email ? "is-invalid" : ""}`} value={form.email}
-                    onChange={e => { setForm({ ...form, email: e.target.value }); setErrors({ ...errors, email: null }); }}
-                    placeholder="ornek@firma.com" />
-                  {errors.email && <div className="invalid-feedback">{errors.email}</div>}
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
-                <div className="form-group">
-                  <label className="form-label">Vergi Dairesi</label>
-                  <input className="form-control" value={form.taxOffice}
-                    onChange={e => setForm({ ...form, taxOffice: e.target.value })}
-                    placeholder="Kadıköy" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Vergi Numarası</label>
-                  <input className={`form-control ${errors.taxNumber ? "is-invalid" : ""}`} value={form.taxNumber}
-                    onChange={e => { setForm({ ...form, taxNumber: e.target.value }); setErrors({ ...errors, taxNumber: null }); }}
-                    placeholder="1234567890" maxLength={10} />
-                  {errors.taxNumber && <div className="invalid-feedback">{errors.taxNumber}</div>}
-                </div>
+      <Modal
+        isOpen={showModal}
+        onClose={handleCloseModal}
+        maxWidth="560px"
+        title={editingId ? "Müşteriyi Düzenle" : "Yeni Müşteri Ekle"}
+        footer={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={handleCloseModal} disabled={submitting}>İptal</button>
+            <button type="submit" form="customer-form" className="btn btn-primary" disabled={submitting}>
+              <UserPlus size={16} /> <span>{submitting ? "Kaydediliyor..." : editingId ? "Değişiklikleri Kaydet" : "Müşteriyi Kaydet"}</span>
+            </button>
+          </>
+        }
+      >
+        <form id="customer-form" onSubmit={handleSubmit}>
+          <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+              <div className="form-group">
+                <label className="form-label">Ad Soyad *</label>
+                <input className={`form-control ${errors.name ? "is-invalid" : ""}`} value={form.name}
+                  onChange={e => { setForm({ ...form, name: e.target.value }); setErrors({ ...errors, name: null }); }}
+                  placeholder="Ahmet Yılmaz" />
+                {errors.name && <div className="invalid-feedback">{errors.name}</div>}
               </div>
               <div className="form-group">
-                <label className="form-label">Adres</label>
-                <textarea className="form-control" rows={2} value={form.address}
-                  onChange={e => setForm({ ...form, address: e.target.value })}
-                  placeholder="Açık adres..." style={{ resize: "none" }} />
+                <label className="form-label">Firma Unvanı *</label>
+                <input className={`form-control ${errors.company ? "is-invalid" : ""}`} value={form.company}
+                  onChange={e => { setForm({ ...form, company: e.target.value }); setErrors({ ...errors, company: null }); }}
+                  placeholder="Yılmaz Ltd. Şti." />
+                {errors.company && <div className="invalid-feedback">{errors.company}</div>}
               </div>
-              <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "0.5rem" }}>
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>İptal</button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  <UserPlus size={16} /> <span>{submitting ? "Kaydediliyor..." : editingId ? "Değişiklikleri Kaydet" : "Müşteriyi Kaydet"}</span>
-                </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+              <div className="form-group">
+                <label className="form-label">Telefon</label>
+                <input className={`form-control ${errors.phone ? "is-invalid" : ""}`} value={form.phone}
+                  onChange={e => { setForm({ ...form, phone: e.target.value }); setErrors({ ...errors, phone: null }); }}
+                  placeholder="05xx xxx xx xx" />
+                {errors.phone && <div className="invalid-feedback">{errors.phone}</div>}
               </div>
-            </form>
+              <div className="form-group">
+                <label className="form-label">E-posta</label>
+                <input className={`form-control ${errors.email ? "is-invalid" : ""}`} value={form.email}
+                  onChange={e => { setForm({ ...form, email: e.target.value }); setErrors({ ...errors, email: null }); }}
+                  placeholder="ornek@firma.com" />
+                {errors.email && <div className="invalid-feedback">{errors.email}</div>}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.85rem" }}>
+              <div className="form-group">
+                <label className="form-label">Vergi Dairesi</label>
+                <input className="form-control" value={form.taxOffice}
+                  onChange={e => setForm({ ...form, taxOffice: e.target.value })}
+                  placeholder="Kadıköy" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Vergi Numarası</label>
+                <input className={`form-control ${errors.taxNumber ? "is-invalid" : ""}`} value={form.taxNumber}
+                  onChange={e => { setForm({ ...form, taxNumber: e.target.value }); setErrors({ ...errors, taxNumber: null }); }}
+                  placeholder="1234567890" maxLength={10} />
+                {errors.taxNumber && <div className="invalid-feedback">{errors.taxNumber}</div>}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Adres</label>
+              <textarea className="form-control" rows={2} value={form.address}
+                onChange={e => setForm({ ...form, address: e.target.value })}
+                placeholder="Açık adres..." style={{ resize: "none" }} />
+            </div>
           </div>
-        </>
-      )}
+        </form>
+      </Modal>
 
       {historyCustomer && (
         <>
