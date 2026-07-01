@@ -562,7 +562,6 @@ const Inventory = () => {
                 <th onClick={() => handleSort("price")} style={{ textAlign: "right", cursor: "pointer" }}>
                   Satış Fiyatı {sortField === "price" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
                 </th>
-                <th style={{ textAlign: "center" }}>Kar %</th>
                 <th style={{ textAlign: "center" }}>KDV</th>
                 <th onClick={() => handleSort("stock")} style={{ textAlign: "center", cursor: "pointer" }}>
                   Mevcut Stok {sortField === "stock" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
@@ -577,7 +576,7 @@ const Inventory = () => {
             <tbody>
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem" }}>
+                  <td colSpan={10} style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem" }}>
                     Aranan kriterlere uygun ürün bulunamadı.
                   </td>
                 </tr>
@@ -594,17 +593,13 @@ const Inventory = () => {
                       <td style={{ textAlign: "right", color: "var(--text-secondary)" }}>
                         {(p.costPrice ?? 0) > 0 ? `${(p.costPrice as number).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺` : "—"}
                       </td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>
-                        {p.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        {(p.costPrice ?? 0) > 0 ? (
-                          (() => {
-                            const margin = ((p.price - (p.costPrice as number)) / p.price * 100);
-                            const color = margin >= 20 ? "var(--success)" : margin >= 10 ? "var(--warning-hover)" : "var(--danger)";
-                            return <span style={{ fontWeight: 600, color }}>%{margin.toFixed(1)}</span>;
-                          })()
-                        ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                      <td style={{ textAlign: "right" }}>
+                        <div style={{ fontWeight: 600 }}>{p.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
+                        {(p.costPrice ?? 0) > 0 && (() => {
+                          const margin = ((p.price - (p.costPrice as number)) / p.price * 100);
+                          const color = margin >= 20 ? "var(--success)" : margin >= 10 ? "var(--warning-hover)" : "var(--danger)";
+                          return <div style={{ fontSize: "0.7rem", fontWeight: 600, color }}>%{margin.toFixed(1)} kar</div>;
+                        })()}
                       </td>
                       <td style={{ textAlign: "center", color: "var(--text-secondary)" }}>
                         %{p.taxRate ?? 20}
