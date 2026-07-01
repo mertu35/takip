@@ -8,12 +8,22 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Dosya boyutu (10 MB) ve tip (PDF/görsel) kısıtlaması olmadan
+    // "allow write: if isSignedIn()" herhangi bir oturum açmış kullanıcının
+    // sınırsız boyutta/istenilen türde dosya yüklemesine izin veriyordu.
+    // Bu, depolama maliyetini ve kötüye kullanım riskini artırıyordu.
+    function isValidReceiptFile() {
+      return request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('application/pdf')
+            || request.resource.contentType.matches('image/.*'));
+    }
+
     // Fişler ve fatura PDF'leri için kurallar
     match /receipts/{allPaths=**} {
       // Giriş yapan her çalışan fişleri okuyabilir
       allow read: if isSignedIn();
-      // Satışçılar ve yöneticiler yeni fiş yükleyebilir
-      allow write: if isSignedIn();
+      // Satışçılar ve yöneticiler yeni fiş yükleyebilir (10MB altı, sadece PDF/görsel)
+      allow write: if isSignedIn() && isValidReceiptFile();
     }
   }
 }

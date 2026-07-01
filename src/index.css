@@ -623,6 +623,290 @@ h6 {
   letter-spacing: -0.5px;
 }
 
+/* Toast Bildirimleri (bkz. context/ToastContext.tsx) */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+  width: 100%;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background-color: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: slideInRight var(--transition-fast) forwards;
+  transition: all var(--transition-normal);
+  border-left: 4px solid transparent;
+}
+
+.toast-success { border-left-color: var(--success); }
+.toast-warning { border-left-color: var(--warning); }
+.toast-error { border-left-color: var(--danger); }
+.toast-info { border-left-color: var(--info); }
+
+.toast-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toast-icon.toast-success { color: var(--success); border-left: none; }
+.toast-icon.toast-warning { color: var(--warning); border-left: none; }
+.toast-icon.toast-error { color: var(--danger); border-left: none; }
+.toast-icon.toast-info { color: var(--info); border-left: none; }
+
+.toast-close {
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  transition: color var(--transition-fast);
+}
+
+.toast-close:hover {
+  color: var(--text-secondary);
+}
+
+/* Sidebar (bkz. components/Sidebar.tsx) — eskiden bu stiller her bileşende
+   yüzlerce satır inline style olarak tekrarlanıyordu. */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  transition: width var(--transition-normal);
+}
+
+.sidebar-logo {
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-collapse-btn {
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-user-card {
+  padding: 1.5rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  background-color: rgba(0, 0, 0, 0.01);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.sidebar-user-card:hover {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.sidebar-user-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.sidebar-user-role {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--primary);
+  background-color: var(--primary-light);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebar-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-nav-link:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.sidebar-nav-link.active {
+  color: var(--primary);
+  background-color: var(--primary-light);
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebar-footer-btn {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  background-color: transparent;
+  border: none;
+  text-align: left;
+}
+
+.sidebar-footer-btn:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.sidebar-footer-btn.danger {
+  color: var(--danger);
+}
+
+.sidebar-footer-btn.danger:hover {
+  background-color: var(--danger-light);
+}
+
+.sidebar-collapsed .sidebar-logo,
+.sidebar-collapsed .sidebar-nav-link,
+.sidebar-collapsed .sidebar-footer-btn {
+  justify-content: center;
+}
+
+/* Duyuru şeridi (bkz. components/Layout.tsx). Sadece birden fazla duyuru
+   olduğunda kayar; hareket duyarlılığı olan kullanıcılar için
+   prefers-reduced-motion tercihine saygı gösterir. */
+.announcement-marquee {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.announcement-track {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.announcement-track.is-scrolling {
+  animation: marquee-scroll 30s linear infinite;
+  will-change: transform;
+}
+
+.announcement-marquee:hover .announcement-track.is-scrolling {
+  animation-play-state: paused;
+}
+
+@keyframes marquee-scroll {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-track.is-scrolling {
+    animation: none;
+  }
+}
+
+/* Layout (bkz. components/Layout.tsx) */
+.sidebar-container {
+  transition: transform var(--transition-normal);
+}
+
+.mobile-toggle {
+  display: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  align-items: center;
+  justify-content: center;
+}
+
+.header-user-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  cursor: pointer;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.header-user-badge:hover {
+  background-color: var(--bg-tertiary);
+}
+
+@media (max-width: 992px) {
+  .app-header {
+    margin-left: 0 !important;
+    padding: 0 1rem !important;
+  }
+  .app-announcement {
+    margin-left: 0 !important;
+    padding: 0.5rem 1rem !important;
+  }
+  .mobile-toggle {
+    display: flex !important;
+  }
+  .sidebar-container {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+  }
+  .sidebar-container.open {
+    transform: translateX(0);
+  }
+  .mobile-overlay {
+    display: block !important;
+  }
+}
+
 /* Spinner Dönüş Animasyonu */
 @keyframes spin {
   from { transform: rotate(0deg); }

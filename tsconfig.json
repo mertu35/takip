@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler modu (Vite) */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /*
+     * KADEMELİ (GRADUAL) TYPESCRIPT GEÇİŞİ:
+     * Bu proje JS'den TS'e taşınırken bilinçli olarak "strict: false" ile
+     * başlatıldı. Amaç; tip güvenliğinin faydalarını (otomatik tamamlama,
+     * fonksiyon imzası kontrolü, veri modeli tutarlılığı) hemen kazanmak,
+     * ama ~25 dosyanın tamamını tek seferde %100 strict'e uydurma riskini
+     * (ve bunun getireceği çok sayıda `any` gizleme baskısını) almamaktır.
+     * Önerilen yol haritası: yeni kod strict yazılır; mevcut dosyalar
+     * zamanla `strict: true`'ya taşınır (dosya dosya `// @ts-strict` gibi
+     * bir kural yerine, aşağıdaki bayraklar tek tek açılarak).
+     */
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
