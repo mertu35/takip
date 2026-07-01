@@ -36,3 +36,6 @@ dist-ssr
 test-db.mjs
 test-*.mjs
 *.test.mjs
+
+# Yerel AI asistan ayarları (Claude Code vb.) - kişisel izin listesi, repoya girmemeli
+.claude/

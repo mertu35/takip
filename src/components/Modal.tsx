@@ -25,6 +25,21 @@ const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = "600px", z
   const contentRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
 
+  // `onClose` çoğu çağıran yerde satır içi (inline) bir fonksiyon olarak
+  // geçiliyor (`onClose={() => setShowModal(false)}`), yani her render'da
+  // YENİ bir referans oluşuyor. Aşağıdaki asıl efekt eskiden `[isOpen, onClose]`
+  // bağımlılığıyla çalışıyordu; bu da modal açıkken formdaki her tuş
+  // vuruşunda (parent yeniden render olup onClose'u yeniden yarattığında)
+  // efektin baştan çalışıp odağı zorla ilk elemana geri götürmesine neden
+  // oluyordu — kullanıcı bir harf yazabiliyor, sonraki harfte odak sıfırlanıp
+  // imleci tekrar alana getirmesi gerekiyordu. Çözüm: `onClose`'un GÜNCEL
+  // halini bir ref'te tutup asıl efekti sadece `isOpen` değiştiğinde
+  // (modal açılıp kapandığında) çalıştırmak.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -36,7 +51,7 @@ const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = "600px", z
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -66,7 +81,8 @@ const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = "600px", z
       // Modal kapanınca odağı, modalı tetikleyen elemana geri ver
       previousActiveElement.current?.focus?.();
     };
-  }, [isOpen, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
