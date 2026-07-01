@@ -1,5 +1,5 @@
 // Takip Sistemi - Müşteri (Customers) Repository
-import { collection, getDocs, addDoc, query, orderBy, where } from "firebase/firestore";
+import { collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy, where } from "firebase/firestore";
 import { firestore, isFirebaseActive } from "../firebase";
 import type { Customer, ActorInfo, Sale } from "../../types";
 import { getLocalData, setLocalData, randomId } from "./localStorageUtils";
@@ -8,6 +8,8 @@ import { logsRepository } from "./logsRepository";
 export interface CustomersRepository {
   getAll(): Promise<Customer[]>;
   add(customer: Omit<Customer, "id" | "createdAt">, actor: ActorInfo): Promise<Customer>;
+  update(customerId: string, fields: Partial<Customer>, actor: ActorInfo): Promise<Customer>;
+  remove(customerId: string, actor: ActorInfo): Promise<boolean>;
 }
 
 const firebaseCustomersRepository: CustomersRepository = {
@@ -27,6 +29,18 @@ const firebaseCustomersRepository: CustomersRepository = {
       `${customer.name} (${customer.company}) müşterisi eklendi.`
     );
     return { id: docRef.id, ...customer } as Customer;
+  },
+  async update(customerId, fields, actor) {
+    const docRef = doc(firestore!, "customers", customerId);
+    await updateDoc(docRef, fields as Record<string, unknown>);
+    await logsRepository.add(actor, "UPDATE_CUSTOMER", `${fields.name || customerId} müşteri bilgileri güncellendi.`);
+    return { id: customerId, ...fields } as Customer;
+  },
+  async remove(customerId, actor) {
+    const docRef = doc(firestore!, "customers", customerId);
+    await deleteDoc(docRef);
+    await logsRepository.add(actor, "DELETE_CUSTOMER", `${customerId} ID'li müşteri silindi.`);
+    return true;
   }
 };
 
@@ -45,6 +59,23 @@ const mockCustomersRepository: CustomersRepository = {
       `${customer.name} (${customer.company}) müşterisi eklendi.`
     );
     return newCustomer;
+  },
+  async update(customerId, fields, actor) {
+    const customers = getLocalData<Customer>("takip_customers");
+    const idx = customers.findIndex((c) => c.id === customerId);
+    if (idx === -1) throw new Error("Müşteri bulunamadı!");
+    customers[idx] = { ...customers[idx], ...fields };
+    setLocalData("takip_customers", customers);
+    await logsRepository.add(actor, "UPDATE_CUSTOMER", `${customers[idx].name} müşteri bilgileri güncellendi.`);
+    return customers[idx];
+  },
+  async remove(customerId, actor) {
+    const customers = getLocalData<Customer>("takip_customers");
+    const target = customers.find((c) => c.id === customerId);
+    const filtered = customers.filter((c) => c.id !== customerId);
+    setLocalData("takip_customers", filtered);
+    await logsRepository.add(actor, "DELETE_CUSTOMER", `${target ? target.name : customerId} müşterisi silindi.`);
+    return true;
   }
 };
 

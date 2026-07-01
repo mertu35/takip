@@ -87,6 +87,21 @@ export const addCustomer = (
   currentUserRole: Role | string
 ) => customersRepository.add(customer, actorOf(currentUserId, currentUserName, currentUserRole));
 
+export const updateCustomer = (
+  customerId: string,
+  updatedFields: Partial<Customer>,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) => customersRepository.update(customerId, updatedFields, actorOf(currentUserId, currentUserName, currentUserRole));
+
+export const deleteCustomer = (
+  customerId: string,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) => customersRepository.remove(customerId, actorOf(currentUserId, currentUserName, currentUserRole));
+
 export const getSalesByCustomer = (customerId: string): Promise<Sale[]> => _getSalesByCustomer(customerId);
 
 // --- KATEGORİLER ---
