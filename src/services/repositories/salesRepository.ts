@@ -20,7 +20,6 @@
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   query,
   where,
@@ -92,7 +91,6 @@ const firebaseSalesRepository: SalesRepository = {
   },
 
   async add(saleData, actor) {
-    const prefix = `TS-${new Date().getFullYear()}-`;
     const salesCol = collection(firestore!, "sales");
     const newSaleDocRef = doc(salesCol);
     const counterDocRef = doc(firestore!, "counters", "sales");
@@ -105,6 +103,9 @@ const firebaseSalesRepository: SalesRepository = {
       const nextNum = lastNum + 1;
       const receiptNo = formatReceiptNo(new Date().getFullYear(), nextNum);
 
+      // Firestore transaction kuralı: TÜM okumalar yazmalardan önce yapılmalı.
+      // Bu yüzden önce tüm ürünleri okuyup doğruluyoruz, sonra topluca yazıyoruz.
+      const stockWrites: { ref: ReturnType<typeof doc>; newStock: number }[] = [];
       for (const item of saleData.items) {
         const pDocRef = doc(firestore!, "products", item.productId);
         const pDoc = await transaction.get(pDocRef);
@@ -116,7 +117,11 @@ const firebaseSalesRepository: SalesRepository = {
             `Yetersiz stok: ${item.productName} (Mevcut: ${currentStock} ${product.unit || "Adet"}, İstenen: ${item.quantity})`
           );
         }
-        transaction.update(pDocRef, { stock: currentStock - item.quantity });
+        stockWrites.push({ ref: pDocRef, newStock: currentStock - item.quantity });
+      }
+
+      for (const w of stockWrites) {
+        transaction.update(w.ref, { stock: w.newStock });
       }
 
       transaction.set(counterDocRef, { lastNo: nextNum });
@@ -229,13 +234,18 @@ const firebaseSalesRepository: SalesRepository = {
         // Stok her zaman satışın güncel kalemleriyle senkron tutulduğu için
         // (bkz. editItems), burada kalemlerdeki miktarları aynen geri eklemek
         // stoğu doğru şekilde eski hâline getirir.
+        // Firestore transaction kuralı: tüm okumalar yazmalardan önce.
+        const stockWrites: { ref: ReturnType<typeof doc>; newStock: number }[] = [];
         for (const item of currentSale.items || []) {
           const pDocRef = doc(firestore!, "products", item.productId);
           const pDoc = await transaction.get(pDocRef);
           if (pDoc.exists()) {
             const product = pDoc.data() as Product;
-            transaction.update(pDocRef, { stock: (product.stock || 0) + item.quantity });
+            stockWrites.push({ ref: pDocRef, newStock: (product.stock || 0) + item.quantity });
           }
+        }
+        for (const w of stockWrites) {
+          transaction.update(w.ref, { stock: w.newStock });
         }
       }
 
@@ -284,6 +294,8 @@ const firebaseSalesRepository: SalesRepository = {
         throw new Error("Sadece reddedilmiş satışlar yeniden gönderilebilir!");
       }
 
+      // Firestore transaction kuralı: tüm okumalar yazmalardan önce.
+      const stockWrites: { ref: ReturnType<typeof doc>; newStock: number }[] = [];
       for (const item of updatedItems) {
         const pDocRef = doc(firestore!, "products", item.productId);
         const pDoc = await transaction.get(pDocRef);
@@ -293,7 +305,10 @@ const firebaseSalesRepository: SalesRepository = {
         if (currentStock < item.quantity) {
           throw new Error(`Yetersiz stok: ${item.productName} (Mevcut: ${currentStock}, İstenen: ${item.quantity})`);
         }
-        transaction.update(pDocRef, { stock: currentStock - item.quantity });
+        stockWrites.push({ ref: pDocRef, newStock: currentStock - item.quantity });
+      }
+      for (const w of stockWrites) {
+        transaction.update(w.ref, { stock: w.newStock });
       }
 
       const totals = computeSaleTotals(updatedItems, updatedDiscount);

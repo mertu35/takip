@@ -83,10 +83,21 @@ export const customersRepository: CustomersRepository = isFirebaseActive
   ? firebaseCustomersRepository
   : mockCustomersRepository;
 
-// Bir müşterinin geçmiş satışlarını getirir (Customers.jsx sayfası tarafından kullanılır)
-export async function getSalesByCustomer(customerId: string): Promise<Sale[]> {
+// Bir müşterinin geçmiş satışlarını getirir (Customers sayfası tarafından kullanılır).
+// ÖNEMLİ: Firestore güvenlik kuralları sorgu bazında değerlendirilir (kurallar
+// filtre DEĞİLDİR). Satışçı rolü yalnızca kendi satışlarını okuyabildiği için,
+// sorguya salespersonId filtresi eklenmezse Firestore sorguyu tümüyle reddeder.
+export async function getSalesByCustomer(
+  customerId: string,
+  role?: string,
+  userId?: string
+): Promise<Sale[]> {
   if (isFirebaseActive) {
-    const q = query(collection(firestore!, "sales"), where("customerId", "==", customerId));
+    const constraints = [where("customerId", "==", customerId)];
+    if (role === "sales" && userId) {
+      constraints.push(where("salespersonId", "==", userId));
+    }
+    const q = query(collection(firestore!, "sales"), ...constraints);
     const snap = await getDocs(q);
     const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Sale, "id">) }));
     docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -94,6 +105,7 @@ export async function getSalesByCustomer(customerId: string): Promise<Sale[]> {
   } else {
     return getLocalData<Sale>("takip_sales")
       .filter((s) => s.customerId === customerId)
+      .filter((s) => !(role === "sales" && userId) || s.salespersonId === userId)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 }

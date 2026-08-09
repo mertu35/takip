@@ -1222,7 +1222,7 @@ const Sales = () => {
         // eskiden burada KDV'yi tutarın İÇİNDEN çıkaran farklı bir formül
         // vardı (bkz. dosya başındaki not), bu da resubmitSale çağrısından
         // önce kullanıcıya YANLIŞ bir önizleme gösteriyordu.
-        const { totalAmount: editTotalAmount, taxAmount: editTaxAmount, netAmount: editNetAmount } =
+        const { taxAmount: editTaxAmount, netAmount: editNetAmount } =
           computeSaleTotals(editCart, editDiscount);
         const filteredEditProducts = products.filter(p =>
           p.name.toLowerCase().includes(editProdSearch.toLowerCase()) ||

@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import Modal from "../components/Modal";
 import {
-  UserPlus, Search, Phone, Mail, Building2, Hash, History, TrendingUp, X, Download,
+  UserPlus, Search, Phone, Mail, Building2, Hash, History, TrendingUp, Download,
   MoreVertical, Edit, Trash2, LayoutGrid, List
 } from "lucide-react";
 import type { Customer, Sale } from "../types";
@@ -73,7 +73,7 @@ const Customers = () => {
       ]);
       setCustomers(customerData);
       setSales(salesData);
-    } catch (e) {
+    } catch {
       showToast("Müşteriler yüklenemedi.", "error");
     } finally {
       setLoading(false);
@@ -208,7 +208,7 @@ const Customers = () => {
     setHistorySales([]);
     setHistoryLoading(true);
     try {
-      const sales = await getSalesByCustomer(customer.id);
+      const sales = await getSalesByCustomer(customer.id, user?.role, user?.uid);
       setHistorySales(sales);
     } catch (err: any) {
       showToast("Satış geçmişi yüklenemedi: " + err.message, "error");
@@ -552,42 +552,37 @@ const Customers = () => {
       </Modal>
 
       {historyCustomer && (
-        <>
-          <div onClick={handleCloseHistory} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", zIndex: 199 }} />
-          <div style={{
-            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            zIndex: 200, width: "min(720px, 96vw)", maxHeight: "88vh",
-            display: "flex", flexDirection: "column", borderRadius: "var(--radius-lg)",
-            backgroundColor: "var(--bg-primary)", boxShadow: "0 20px 60px rgba(0,0,0,0.3)"
-          }} className="animate-slide-up">
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border-color)", flexShrink: 0 }}>
-              <div>
-                <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.2rem" }}>{historyCustomer.company}</h3>
-                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{historyCustomer.name}</div>
-              </div>
-              <button onClick={handleCloseHistory} style={{ cursor: "pointer", color: "var(--text-secondary)", padding: "0.25rem" }} aria-label="Kapat">
-                <X size={20} />
-              </button>
-            </div>
-
+        <Modal
+          isOpen={!!historyCustomer}
+          onClose={handleCloseHistory}
+          maxWidth="720px"
+          title={
+            <span>
+              {historyCustomer.company}
+              <span style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--text-secondary)", marginLeft: "0.6rem" }}>
+                {historyCustomer.name}
+              </span>
+            </span>
+          }
+        >
+          <div className="modal-body">
             {historyStats && !historyLoading && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem", padding: "1rem 1.5rem", borderBottom: "1px solid var(--border-color)", flexShrink: 0 }}>
-                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-secondary)", borderRadius: "var(--radius-sm)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)" }}>
                   <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "var(--primary)" }}>{historyStats.totalCount}</div>
                   <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Toplam Satış</div>
                 </div>
-                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-secondary)", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)" }}>
                   <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "var(--success)" }}>{historyStats.approvedCount}</div>
                   <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Onaylanan</div>
                 </div>
-                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-secondary)", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)" }}>
                   <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--primary)" }}>
                     {historyStats.totalRevenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
                   </div>
                   <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Toplam Ciro</div>
                 </div>
-                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-secondary)", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ textAlign: "center", padding: "0.75rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)" }}>
                   <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text-secondary)" }}>
                     {historyStats.totalTax.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
                   </div>
@@ -596,7 +591,7 @@ const Customers = () => {
               </div>
             )}
 
-            <div style={{ overflowY: "auto", flex: 1, padding: "0 1.5rem 1.5rem" }}>
+            <div>
               {historyLoading ? (
                 <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>Yükleniyor...</div>
               ) : historySales.length === 0 ? (
@@ -667,7 +662,7 @@ const Customers = () => {
               )}
             </div>
           </div>
-        </>
+        </Modal>
       )}
     </div>
   );

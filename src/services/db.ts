@@ -14,7 +14,6 @@ import type {
   Sale,
   SaleItem,
   AppNotification,
-  NotificationType,
   LogEntry,
   Announcement,
   CompanyProfile,
@@ -34,7 +33,7 @@ import {
   exportBackupData as _exportBackupData,
   importBackupData as _importBackupData
 } from "./repositories/settingsRepository";
-import { getLocalData, setLocalData } from "./repositories/localStorageUtils";
+import { setLocalData } from "./repositories/localStorageUtils";
 import {
   INITIAL_CUSTOMERS,
   INITIAL_PRODUCTS,
@@ -102,7 +101,8 @@ export const deleteCustomer = (
   currentUserRole: Role | string
 ) => customersRepository.remove(customerId, actorOf(currentUserId, currentUserName, currentUserRole));
 
-export const getSalesByCustomer = (customerId: string): Promise<Sale[]> => _getSalesByCustomer(customerId);
+export const getSalesByCustomer = (customerId: string, role?: string, userId?: string): Promise<Sale[]> =>
+  _getSalesByCustomer(customerId, role, userId);
 
 // --- KATEGORİLER ---
 export const getCategories = (): Promise<Category[]> => categoriesRepository.getAll();
@@ -217,13 +217,9 @@ export const resubmitSale = (
   );
 
 // --- BİLDİRİMLER ---
-export const addNotification = (
-  userId: string,
-  message: string,
-  type: NotificationType = "info",
-  meta: Partial<AppNotification> = {}
-) => notificationsRepository.add(userId, message, type, meta);
-
+// NOT: Bildirim OLUŞTURMA facade'ı burada yer almaz; bildirimler yalnızca
+// iş akışının içinden (salesRepository.processApproval) üretilir ve doğrudan
+// notificationsRepository.add çağrılır. Sayfalar sadece okur/işaretler.
 export const getNotifications = (userId: string): Promise<AppNotification[]> =>
   notificationsRepository.getForUser(userId);
 
