@@ -703,7 +703,7 @@ const Accounting = () => {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: "0.5rem",
-                    backgroundColor: "var(--primary)",
+                    backgroundColor: "var(--primary-strong)",
                     color: "#fff",
                     border: "none",
                     padding: "0.6rem",

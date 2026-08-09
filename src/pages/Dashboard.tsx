@@ -1,6 +1,7 @@
 // Takip Sistemi - Yönetici Paneli (Dashboard)
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { getSales, getProducts } from "../services/db";
+import { useTheme } from "../context/ThemeContext";
 import {
   AreaChart, Area,
   BarChart, Bar,
@@ -23,10 +24,27 @@ import {
 import { Link } from "react-router-dom";
 import type { Sale, Product } from "../types";
 
+// Recharts, renkleri SVG "presentation attribute"larına yazar
+// (stroke/fill/stop-color). CSS değişkenleri bu attribute'larda WebKit/Safari
+// tarafından çözülmez; oraya `var(--primary)` verilirse grafik Safari'de
+// renksiz kalır. Bu yüzden grafiklere düz renk değeri veriyoruz.
+//
+// Değerler bilinçli olarak index.css'teki tema değişkenlerinin kopyasıdır:
+// DOM'dan getComputedStyle ile okumak güvenilir değil, çünkü ThemeProvider
+// `data-theme` niteliğini bir effect içinde yazıyor; render sırasında yapılan
+// okuma hep bir tema geride kalıyor. Paleti index.css ile birlikte güncelleyin.
+const CHART_PALETTE = {
+  light: { primary: "#1e3a8a", warning: "#c2410c", border: "#cbd5e1", textSecondary: "#334155" },
+  dark: { primary: "#3b82f6", warning: "#f97316", border: "#242f49", textSecondary: "#94a3b8" }
+} as const;
+
 const Dashboard = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const { theme } = useTheme();
+
+  const chartColor = useMemo(() => CHART_PALETTE[theme] ?? CHART_PALETTE.light, [theme]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -302,19 +320,19 @@ const Dashboard = () => {
             <AreaChart data={trendData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="ciroGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                  <stop offset="5%" stopColor={chartColor.primary} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={chartColor.primary} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v: any) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 11, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={48} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColor.border} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v: any) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 11, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} width={48} />
               <Tooltip
                 formatter={(v: any) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, "Ciro"]}
                 contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.85rem" }}
                 labelStyle={{ fontWeight: 700, color: "var(--text-primary)" }}
               />
-              <Area type="monotone" dataKey="ciro" stroke="#2563eb" strokeWidth={2.5} fill="url(#ciroGrad)" dot={{ r: 4, fill: "#2563eb", strokeWidth: 0 }} activeDot={{ r: 6, fill: "#f59e0b" }} />
+              <Area type="monotone" dataKey="ciro" stroke={chartColor.primary} strokeWidth={2.5} fill="url(#ciroGrad)" dot={{ r: 4, fill: chartColor.primary, strokeWidth: 0 }} activeDot={{ r: 6, fill: chartColor.warning }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -373,9 +391,9 @@ const Dashboard = () => {
               </h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={categorySales} margin={{ top: 4, right: 16, left: 0, bottom: 32 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} angle={-25} textAnchor="end" interval={0} />
-                  <YAxis tickFormatter={(v: any) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 10, fill: "var(--text-secondary)" }} axisLine={false} tickLine={false} width={44} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColor.border} vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} angle={-25} textAnchor="end" interval={0} />
+                  <YAxis tickFormatter={(v: any) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 10, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} width={44} />
                   <Tooltip
                     formatter={(v: any) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, "Ciro"]}
                     contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}

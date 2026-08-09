@@ -159,7 +159,7 @@ const Layout = ({ children }: LayoutProps) => {
                       position: "absolute",
                       top: "2px",
                       right: "2px",
-                      backgroundColor: "var(--danger)",
+                      backgroundColor: "var(--danger-strong)",
                       color: "white",
                       fontSize: "0.65rem",
                       fontWeight: 700,
@@ -275,7 +275,7 @@ const Layout = ({ children }: LayoutProps) => {
           <div
             className="app-announcement"
             style={{
-              backgroundColor: "var(--primary)",
+              backgroundColor: "var(--primary-strong)",
               color: "#fff",
               padding: "0.5rem 2rem",
               fontSize: "0.85rem",

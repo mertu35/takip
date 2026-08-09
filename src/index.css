@@ -8,26 +8,37 @@
   --bg-tertiary: #e2e8f0;
   --text-primary: #0f172a;
   --text-secondary: #334155;
-  --text-muted: #64748b;
-  
+  /* NOT: Aksan renkleri WCAG AA (küçük metin için 4.5:1) sağlayacak şekilde
+     seçilmiştir. Bunlar hem rozet metni (--*-light zemin üzerinde) hem de
+     dolgulu buton zemini (beyaz metin altında) olarak kullanıldığından, iki
+     kullanımı da geçen tonlar tercih edildi. Değiştirirken ikisini de ölçün. */
+  --text-muted: #586274;
+
   --primary: #1e3a8a;
   --primary-hover: #1d4ed8;
   --primary-light: #dbeafe;
-  
-  --success: #0d9488;
-  --success-hover: #0f766e;
+  /* Dolgulu yüzeyler (beyaz metin taşıyan buton/şerit) için. Karanlık temada
+     --primary metin rengi olarak açılmak zorunda olduğundan beyaz metni
+     taşıyamaz; bu yüzden zemin rolü ayrı bir jetona alındı. */
+  --primary-strong: #1e3a8a;
+  --primary-strong-hover: #1d4ed8;
+
+  --success: #0f766e;
+  --success-hover: #115e59;
   --success-light: #ccfbf1;
-  
-  --warning: #ea580c;
-  --warning-hover: #c2410c;
+
+  --warning: #c2410c;
+  --warning-hover: #9a3412;
   --warning-light: #ffedd5;
-  
-  --danger: #e11d48;
-  --danger-hover: #be123c;
+
+  --danger: #be123c;
+  --danger-hover: #9f1239;
   --danger-light: #ffe4e6;
-  
-  --info: #0284c7;
-  --info-hover: #0369a1;
+  /* Beyaz metin taşıyan dolgulu kırmızı yüzeyler (ör. bildirim sayacı) */
+  --danger-strong: #be123c;
+
+  --info: #0369a1;
+  --info-hover: #075985;
   --info-light: #e0f2fe;
 
   --border-color: #cbd5e1;
@@ -61,11 +72,17 @@
   --bg-tertiary: #1e2640;
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  
+  /* Açık temadan kopyalanmış #64748b buradaki koyu zeminlerde 3.1-3.6:1'de
+     kalıyordu; karanlık tema için ayrıca açıldı. */
+  --text-muted: #8b98ad;
+
   --primary: #3b82f6;
   --primary-hover: #60a5fa;
   --primary-light: rgba(59, 130, 246, 0.15);
+  /* Karanlık temada --primary metin olarak okunaklı olmak için açık; beyaz
+     metin taşıyan dolgulu yüzeyler bu koyu tonu kullanır. */
+  --primary-strong: #1d4ed8;
+  --primary-strong-hover: #2563eb;
   
   --success: #14b8a6;
   --success-hover: #2dd4bf;
@@ -78,6 +95,8 @@
   --danger: #f43f5e;
   --danger-hover: #fb7185;
   --danger-light: rgba(244, 63, 94, 0.15);
+  /* #f43f5e üzerinde beyaz metin 3.67:1'de kalıyor; dolgulu sayaç bir tık koyu */
+  --danger-strong: #e11d48;
   
   --info: #38bdf8;
   --info-hover: #7dd3fc;
@@ -300,12 +319,12 @@ h6 {
 }
 
 .btn-primary {
-  background-color: var(--primary);
+  background-color: var(--primary-strong);
   color: white;
 }
 
 .btn-primary:hover {
-  background-color: var(--primary-hover);
+  background-color: var(--primary-strong-hover);
   box-shadow: 0 4px 12px rgba(30, 58, 138, 0.25);
 }
 
@@ -338,16 +357,6 @@ h6 {
 .btn-danger:hover {
   background-color: var(--danger-hover);
   box-shadow: 0 4px 12px rgba(225, 29, 72, 0.25);
-}
-
-.btn-warning {
-  background-color: var(--warning);
-  color: white;
-}
-
-.btn-warning:hover {
-  background-color: var(--warning-hover);
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
 }
 
 .btn-sm {
