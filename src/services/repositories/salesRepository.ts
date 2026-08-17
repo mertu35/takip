@@ -147,7 +147,7 @@ const firebaseSalesRepository: SalesRepository = {
         date: new Date().toISOString()
       };
 
-      const { id, ...saleWithoutId } = finalSale;
+      const { id: _, ...saleWithoutId } = finalSale;
       transaction.set(newSaleDocRef, saleWithoutId);
     });
 

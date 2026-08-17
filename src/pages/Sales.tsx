@@ -1046,8 +1046,8 @@ const Sales = () => {
 
               <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
                 <img
-                  src="/logo.png"
-                  alt="Özkon Çelik Logo"
+                  src="/logo.svg"
+                  alt="Özkon Yapı Logo"
                   style={{
                     height: "45px",
                     objectFit: "contain",
@@ -1056,7 +1056,7 @@ const Sales = () => {
                   }}
                 />
                 <h2 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0, fontFamily: "sans-serif" }}>
-                  {companyProfile?.companyName || "ÖZKON ÇELİK"}
+                  {companyProfile?.companyName || "ÖZKON YAPI"}
                 </h2>
                 <div style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>
                   {companyProfile?.address || "Merkez Mah. Çelik Sanayi Bulvarı No: 45 Sarıyer / İstanbul"}

@@ -67,7 +67,7 @@ const Layout = ({ children }: LayoutProps) => {
       case "/inventory": return "Ürün ve Stok Takibi";
       case "/logs": return "Sistem İşlem Logları";
       case "/settings": return "Sistem Ayarları";
-      default: return "Özkon Çelik Takip";
+      default: return "Özkon Yapı Takip";
     }
   };
 

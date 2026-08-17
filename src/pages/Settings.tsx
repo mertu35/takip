@@ -691,7 +691,7 @@ const SettingsPage = () => {
                   className="form-control"
                   value={profile.companyName}
                   onChange={(e) => setProfile({ ...profile, companyName: e.target.value.toUpperCase() })}
-                  placeholder="ÖZKON ÇELİK"
+                  placeholder="ÖZKON YAPI"
                   required
                 />
               </div>

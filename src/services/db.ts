@@ -51,7 +51,7 @@ function initLocalStorage() {
   if (!localStorage.getItem("takip_logs")) setLocalData("takip_logs", INITIAL_LOGS);
   if (!localStorage.getItem("takip_announcements")) {
     setLocalData("takip_announcements", [
-      { id: "ann-1", text: "Özkon Çelik Takip Sistemine Hoş Geldiniz! İyi çalışmalar dileriz.", active: true, createdAt: new Date().toISOString() }
+      { id: "ann-1", text: "Özkon Yapı Takip Sistemine Hoş Geldiniz! İyi çalışmalar dileriz.", active: true, createdAt: new Date().toISOString() }
     ]);
   }
 }

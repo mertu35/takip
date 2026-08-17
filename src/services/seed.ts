@@ -108,7 +108,7 @@ export async function initializeFirebaseDatabase(
     }
     await setDoc(doc(firestore!, "announcements", "ann-1"), {
       id: "ann-1",
-      text: "Özkon Çelik Takip Sistemine Hoş Geldiniz! İyi çalışmalar dileriz.",
+      text: "Özkon Yapı Takip Sistemine Hoş Geldiniz! İyi çalışmalar dileriz.",
       active: true,
       createdAt: new Date().toISOString()
     });

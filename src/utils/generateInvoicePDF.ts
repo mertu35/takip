@@ -26,7 +26,7 @@ export const generateInvoicePDF = (sale: Sale, companyProfile?: CompanyProfile |
   const W = doc.internal.pageSize.getWidth();
   const margin = 18;
 
-  const companyName = tr(companyProfile?.companyName || "OZKON CELIK");
+  const companyName = tr(companyProfile?.companyName || "OZKON YAPI");
   const address = tr(companyProfile?.address || "Merkez Mah. Celik Sanayi Bulvari No: 45 Sarıyer / Istanbul");
   const phone = companyProfile?.phone || "0212 999 88 77";
   const fax = companyProfile?.fax;

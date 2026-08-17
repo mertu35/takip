@@ -86,13 +86,13 @@ const Sidebar = ({ onOpenProfile }: SidebarProps) => {
         <div className="sidebar-logo" style={{ justifyContent: collapsed ? "center" : "space-between" }}>
           {!collapsed && (
             <Link to="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }} aria-label="Ana Sayfa">
-              <img src="/logo.png" alt="Özkon Çelik Logo" style={{ height: "28px", objectFit: "contain", display: "block" }} />
-              <span className="brand-title" style={{ fontSize: "1rem", color: "var(--primary)" }}>ÖZKON ÇELİK</span>
+              <img src="/logo.svg" alt="Özkon Yapı Logo" style={{ height: "28px", objectFit: "contain", display: "block" }} />
+              <span className="brand-title" style={{ fontSize: "1rem", color: "var(--primary)" }}>ÖZKON YAPI</span>
             </Link>
           )}
           {collapsed && (
             <Link to="/" style={{ display: "flex", alignItems: "center", justifyContent: "center" }} aria-label="Ana Sayfa">
-              <img src="/logo.png" alt="Özkon Çelik Logo" style={{ height: "26px", width: "26px", objectFit: "contain", display: "block" }} />
+              <img src="/logo.svg" alt="Özkon Yapı Logo" style={{ height: "26px", width: "26px", objectFit: "contain", display: "block" }} />
             </Link>
           )}
 

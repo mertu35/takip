@@ -6,7 +6,7 @@ import { getLocalData, setLocalData } from "./localStorageUtils";
 import { logsRepository } from "./logsRepository";
 
 const DEFAULT_PROFILE: CompanyProfile = {
-  companyName: "ÖZKON ÇELİK",
+  companyName: "ÖZKON YAPI",
   address: "Merkez Mah. Çelik Sanayi Bulvarı No: 45 Sarıyer / İstanbul",
   phone: "0212 999 88 77",
   fax: "0212 999 88 78",

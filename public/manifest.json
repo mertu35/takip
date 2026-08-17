@@ -1,7 +1,7 @@
 {
-  "name": "Özkon Çelik Takip Sistemi",
+  "name": "Özkon Yapı Takip Sistemi",
   "short_name": "Özkon Takip",
-  "description": "Özkon Çelik Satış, Muhasebe Onay ve Stok Yönetim Takip Otomasyonu",
+  "description": "Özkon Yapı Satış, Muhasebe Onay ve Stok Yönetim Takip Otomasyonu",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -9,9 +9,9 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ]

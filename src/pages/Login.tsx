@@ -124,8 +124,8 @@ const Login = () => {
         {/* Sistem Başlığı / Logo */}
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <img
-            src="/logo.png"
-            alt="Özkon Çelik Logo"
+            src="/logo.svg"
+            alt="Özkon Yapı Logo"
             style={{
               height: "60px",
               maxWidth: "100%",
