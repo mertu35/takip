@@ -64,16 +64,26 @@ const Dashboard = () => {
   if (loading) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
-        <section className="grid-cols-4">
-          <div className="skeleton-card" />
-          <div className="skeleton-card" />
-          <div className="skeleton-card" />
-          <div className="skeleton-card" />
+        <section className="grid-cols-4" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.25rem" }}>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minHeight: "110px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="skeleton" style={{ width: "80px", height: "14px" }} />
+                <div className="skeleton" style={{ width: "32px", height: "32px", borderRadius: "8px" }} />
+              </div>
+              <div className="skeleton" style={{ width: "130px", height: "26px" }} />
+            </div>
+          ))}
         </section>
-        <section className="skeleton-card" style={{ height: "120px" }} />
         <section style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem" }} className="grid-cols-2">
-          <div className="skeleton-card" style={{ height: "300px" }} />
-          <div className="skeleton-card" style={{ height: "300px" }} />
+          <div className="card" style={{ minHeight: "340px", display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div className="skeleton" style={{ width: "140px", height: "20px" }} />
+            <div className="skeleton" style={{ width: "100%", height: "260px", borderRadius: "10px" }} />
+          </div>
+          <div className="card" style={{ minHeight: "340px", display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div className="skeleton" style={{ width: "140px", height: "20px" }} />
+            <div className="skeleton" style={{ width: "100%", height: "260px", borderRadius: "10px" }} />
+          </div>
         </section>
       </div>
     );

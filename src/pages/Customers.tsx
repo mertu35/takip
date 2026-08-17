@@ -222,11 +222,32 @@ const Customers = () => {
     setHistorySales([]);
   };
 
-  if (loading) return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh", color: "var(--text-secondary)" }}>
-      Yükleniyor...
-    </div>
-  );
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
+        <section className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="skeleton" style={{ width: "160px", height: "24px" }} />
+          <div className="skeleton" style={{ width: "140px", height: "36px" }} />
+        </section>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                <div className="skeleton" style={{ width: "40px", height: "40px", borderRadius: "50%" }} />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                  <div className="skeleton" style={{ width: "70%", height: "16px" }} />
+                  <div className="skeleton" style={{ width: "50%", height: "14px" }} />
+                </div>
+              </div>
+              <div className="skeleton" style={{ width: "100%", height: "14px" }} />
+              <div className="skeleton" style={{ width: "80%", height: "14px" }} />
+              <div className="skeleton" style={{ width: "100%", height: "32px", borderRadius: "6px" }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const historyStats = historyCustomer ? (() => {
     const approved = historySales.filter(s => s.status === "approved");

@@ -136,6 +136,7 @@ const Sales = () => {
   // Satış Başarı & Fiş Önizleme Modal States
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastCreatedSale, setLastCreatedSale] = useState<Sale | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   // Ürün Ekleme Form States
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -173,10 +174,8 @@ const Sales = () => {
     };
   }, [showCustomerModal, showReceiptModal]);
 
-  const handleOverlayClick = (e: React.MouseEvent, closeFn: (v: boolean) => void) => {
-    if ((e.target as HTMLElement).className === "modal-overlay") {
-      closeFn(false);
-    }
+  const handleOverlayClick = (_e: React.MouseEvent, _closeFn: (v: boolean) => void) => {
+    // Form doldurulurken dış boşluğa kazara tıklanması durumunda modalın kapanması engellendi
   };
 
   const handleSort = (field: keyof Sale) => {
@@ -385,16 +384,23 @@ const Sales = () => {
     if (submitting) return;
 
     if (!selectedCustomerId) {
-      showToast("Lütfen bir müşteri seçin.", "warning");
+      showToast("Lütfen 1. Adımdan bir Müşteri / Firma seçin.", "warning");
       return;
     }
     if (cart.length === 0) {
-      showToast("Lütfen sepete en az bir ürün ekleyin.", "warning");
+      showToast("Sepetiniz boş! Lütfen sağ panelden sepete en az bir ürün ekleyin.", "warning");
       return;
     }
 
     const customer = customers.find(c => c.id === selectedCustomerId);
-    if (!customer || !user) return;
+    if (!customer) {
+      showToast("Seçilen müşteri sistemde bulunamadı. Lütfen tekrar seçin.", "warning");
+      return;
+    }
+    if (!user) {
+      showToast("Oturum süresi dolmuş olabilir. Lütfen sayfayı yenileyin.", "error");
+      return;
+    }
 
     setSubmitting(true);
 
@@ -717,7 +723,22 @@ const Sales = () => {
 
         {/* Geçmiş Satışlar ve Fiş Tekrar Yazdırma */}
         <section className="card">
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Geçmiş Satışlarım & Fiş Yazdırma</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <h3 style={{ fontSize: "1.05rem", fontWeight: 600, margin: 0 }}>
+              {showAllHistory ? "Geçmiş Satışlarım & Fiş Yazdırma" : "Son 5 Satış & Fiş Yazdırma"}
+            </h3>
+            {salesHistory.length > 5 && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: "0.75rem", padding: "0.2rem 0.55rem" }}
+                onClick={() => setShowAllHistory(!showAllHistory)}
+              >
+                {showAllHistory ? "Son 5'i Göster" : `Tümünü Göster (${salesHistory.length})`}
+              </button>
+            )}
+          </div>
+
           <div className="table-container" style={{ maxHeight: "250px", overflowY: "auto" }}>
             <table className="table" style={{ fontSize: "0.85rem" }}>
               <thead>
@@ -743,58 +764,62 @@ const Sales = () => {
                     </td>
                   </tr>
                 ) : (
-                  getSortedHistory(salesHistory).map((sale) => (
-                    <tr key={sale.id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{sale.receiptNo}</div>
-                        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                          {new Date(sale.date).toLocaleDateString('tr-TR')}
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 600, maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sale.customerCompany}>
-                          {sale.customerCompany}
-                        </div>
-                      </td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>
-                        {sale.netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <span className={`badge badge-${sale.status === 'approved' ? 'success' : sale.status === 'rejected' ? 'danger' : 'warning'}`} style={{ fontSize: "0.6rem", padding: "0.15rem 0.35rem" }}>
-                          {sale.status === 'approved' ? 'Onaylandı' : sale.status === 'rejected' ? 'Reddedildi' : 'Bekliyor'}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <div style={{ display: "flex", gap: "0.35rem", justifyContent: "center" }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-icon btn-sm"
-                            onClick={() => {
-                              setLastCreatedSale(sale);
-                              setShowReceiptModal(true);
-                            }}
-                            title="Bilgi Fişini Yazdır"
-                            style={{ padding: "0.35rem" }}
-                            aria-label="Bilgi Fişini Yazdır"
-                          >
-                            <Printer size={14} />
-                          </button>
-                          {sale.status === "rejected" && (
+                  (() => {
+                    const sorted = getSortedHistory(salesHistory);
+                    const displayed = showAllHistory ? sorted : sorted.slice(0, 5);
+                    return displayed.map((sale) => (
+                      <tr key={sale.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{sale.receiptNo}</div>
+                          <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                            {new Date(sale.date).toLocaleDateString('tr-TR')}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600, maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sale.customerCompany}>
+                            {sale.customerCompany}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: "right", fontWeight: 600 }}>
+                          {sale.netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className={`badge badge-${sale.status === 'approved' ? 'success' : sale.status === 'rejected' ? 'danger' : 'warning'}`} style={{ fontSize: "0.6rem", padding: "0.15rem 0.35rem" }}>
+                            {sale.status === 'approved' ? 'Onaylandı' : sale.status === 'rejected' ? 'Reddedildi' : 'Bekliyor'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <div style={{ display: "flex", gap: "0.35rem", justifyContent: "center" }}>
                             <button
                               type="button"
-                              className="btn btn-sm"
-                              onClick={() => handleOpenEditModal(sale)}
-                              title="Düzenle & Tekrar Gönder"
-                              style={{ padding: "0.35rem 0.5rem", backgroundColor: "var(--warning-light)", color: "var(--warning-hover)", border: "1px solid var(--warning-hover)" }}
-                              aria-label="Düzenle ve Tekrar Gönder"
+                              className="btn btn-secondary btn-icon btn-sm"
+                              onClick={() => {
+                                setLastCreatedSale(sale);
+                                setShowReceiptModal(true);
+                              }}
+                              title="Bilgi Fişini Yazdır"
+                              style={{ padding: "0.35rem" }}
+                              aria-label="Bilgi Fişini Yazdır"
                             >
-                              <Edit3 size={14} />
+                              <Printer size={14} />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {sale.status === "rejected" && (
+                              <button
+                                type="button"
+                                className="btn btn-sm"
+                                onClick={() => handleOpenEditModal(sale)}
+                                title="Düzenle & Tekrar Gönder"
+                                style={{ padding: "0.35rem 0.5rem", backgroundColor: "var(--warning-light)", color: "var(--warning-hover)", border: "1px solid var(--warning-hover)" }}
+                                aria-label="Düzenle ve Tekrar Gönder"
+                              >
+                                <Edit3 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ));
+                  })()
                 )}
               </tbody>
             </table>
@@ -810,7 +835,7 @@ const Sales = () => {
           <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Ürün Ekle</h3>
 
           <div className="form-group">
-            <label className="form-label">Ürün Arama (Kod, İsim veya Barkod)</label>
+            <label className="form-label">Ürün Arama (İsim veya Barkod)</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <div style={{ position: "relative", flex: 1 }}>
                 <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
@@ -820,7 +845,7 @@ const Sales = () => {
                   type="text"
                   className="form-control"
                   style={{ paddingLeft: "2.25rem" }}
-                  placeholder="Örn: Monitör veya barkod numarası..."
+                  placeholder="Ürün adı veya barkod okutun..."
                   value={prodSearch}
                   onChange={(e) => setProdSearch(e.target.value)}
                 />
@@ -856,7 +881,7 @@ const Sales = () => {
                 const isKritik = p.stock <= p.criticalStock;
                 return (
                   <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                    {p.name} (Kod: {p.code} | Stok: {p.stock} {p.unit}) {isKritik ? "⚠️" : ""}
+                    {p.name} (Barkod: {p.barcode || p.code} | Stok: {p.stock} {p.unit}) {isKritik ? "⚠️" : ""}
                   </option>
                 );
               })}
@@ -978,9 +1003,11 @@ const Sales = () => {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "0.5rem"
+              gap: "0.5rem",
+              opacity: (cart.length === 0 || !selectedCustomerId) ? 0.75 : 1,
+              cursor: submitting ? "not-allowed" : "pointer"
             }}
-            disabled={cart.length === 0 || !selectedCustomerId || submitting}
+            disabled={submitting}
           >
             {submitting ? (
               <>
@@ -1299,7 +1326,7 @@ const Sales = () => {
           ((p as any).barcode && (p as any).barcode.toLowerCase().includes(editProdSearch.toLowerCase()))
         );
         return (
-          <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowEditModal(false); }}>
+          <div className="modal-overlay">
             <div className="modal-content animate-slide-up" style={{ maxWidth: "680px", maxHeight: "90vh", overflowY: "auto" }} role="dialog" aria-modal="true">
               <div className="modal-header">
                 <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>

@@ -14,7 +14,8 @@ import {
   Clock,
   Database,
   Eye,
-  Download
+  Download,
+  Rows3
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { Sale, SaleItem } from "../types";
@@ -26,6 +27,15 @@ const Accounting = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"pending" | "archive">("pending");
+  const [isCompact, setIsCompact] = useState<boolean>(() => {
+    return localStorage.getItem("takip_accounting_compact") === "true";
+  });
+
+  const toggleCompact = () => {
+    const next = !isCompact;
+    setIsCompact(next);
+    localStorage.setItem("takip_accounting_compact", next ? "true" : "false");
+  };
 
   // Sorting States
   const [sortField, setSortField] = useState<string>("date");
@@ -88,16 +98,22 @@ const Accounting = () => {
   if (loading) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
-        <section className="card" style={{ height: "60px" }}>
-          <div className="skeleton-row" style={{ width: "15%" }} />
-        </section>
-        <section className="card">
-          <div className="skeleton-loader-container">
-            <div className="skeleton-row title" />
-            <div className="skeleton-row" />
-            <div className="skeleton-row" />
-            <div className="skeleton-row" />
-            <div className="skeleton-row" />
+        <div style={{ display: "flex", gap: "2rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.75rem" }}>
+          <div className="skeleton" style={{ width: "160px", height: "24px" }} />
+          <div className="skeleton" style={{ width: "180px", height: "24px" }} />
+        </div>
+        <section className="card" style={{ padding: "1.5rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1.5fr 1fr 1fr 1fr", gap: "1rem", alignItems: "center", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-color)" }}>
+                <div className="skeleton" style={{ height: "18px", width: "80%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "90%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "70%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "60%" }} />
+                <div className="skeleton" style={{ height: "24px", width: "80px", borderRadius: "12px" }} />
+                <div className="skeleton" style={{ height: "30px", width: "60px", borderRadius: "6px" }} />
+              </div>
+            ))}
           </div>
         </section>
       </div>
@@ -249,59 +265,75 @@ const Accounting = () => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
 
-      {/* Tab Kontrolü */}
+      {/* Tab Kontrolü ve Kompakt Görünüm Butonu */}
       <div style={{
         display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
         borderBottom: "1px solid var(--border-color)",
-        gap: "2rem",
+        flexWrap: "wrap",
+        gap: "1rem",
         paddingBottom: "0.25rem"
       }}>
+        <div style={{ display: "flex", gap: "2rem" }}>
+          <button
+            onClick={() => setActiveTab("pending")}
+            style={{
+              fontSize: "1rem",
+              fontWeight: activeTab === "pending" ? 600 : 500,
+              color: activeTab === "pending" ? "var(--primary)" : "var(--text-secondary)",
+              borderBottom: activeTab === "pending" ? "2px solid var(--primary)" : "2px solid transparent",
+              paddingBottom: "0.75rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem"
+            }}
+          >
+            <Clock size={18} />
+            <span>Bekleyen Onaylar</span>
+            <span className="badge badge-warning" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
+              {pendingSales.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab("archive")}
+            style={{
+              fontSize: "1rem",
+              fontWeight: activeTab === "archive" ? 600 : 500,
+              color: activeTab === "archive" ? "var(--primary)" : "var(--text-secondary)",
+              borderBottom: activeTab === "archive" ? "2px solid var(--primary)" : "2px solid transparent",
+              paddingBottom: "0.75rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem"
+            }}
+          >
+            <Database size={18} />
+            <span>Arşivlenmiş Kayıtlar</span>
+            <span className="badge badge-primary" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
+              {archivedSales.length}
+            </span>
+          </button>
+        </div>
+
         <button
-          onClick={() => setActiveTab("pending")}
-          style={{
-            fontSize: "1rem",
-            fontWeight: activeTab === "pending" ? 600 : 500,
-            color: activeTab === "pending" ? "var(--primary)" : "var(--text-secondary)",
-            borderBottom: activeTab === "pending" ? "2px solid var(--primary)" : "2px solid transparent",
-            paddingBottom: "0.75rem",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem"
-          }}
+          type="button"
+          className={`btn btn-secondary btn-sm ${isCompact ? "btn-primary" : ""}`}
+          onClick={toggleCompact}
+          title={isCompact ? "Standart satır aralığına geç" : "Daha fazla satır görmek için aralıkları daralt"}
+          style={{ marginBottom: "0.5rem" }}
         >
-          <Clock size={18} />
-          <span>Bekleyen Onaylar</span>
-          <span className="badge badge-warning" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
-            {pendingSales.length}
-          </span>
-        </button>
-        <button
-          onClick={() => setActiveTab("archive")}
-          style={{
-            fontSize: "1rem",
-            fontWeight: activeTab === "archive" ? 600 : 500,
-            color: activeTab === "archive" ? "var(--primary)" : "var(--text-secondary)",
-            borderBottom: activeTab === "archive" ? "2px solid var(--primary)" : "2px solid transparent",
-            paddingBottom: "0.75rem",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem"
-          }}
-        >
-          <Database size={18} />
-          <span>Arşivlenmiş Kayıtlar</span>
-          <span className="badge badge-primary" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
-            {archivedSales.length}
-          </span>
+          <Rows3 size={16} />
+          <span>{isCompact ? "Kompakt Tablo" : "Normal Tablo"}</span>
         </button>
       </div>
 
       {/* İÇERİK TABLOSU */}
-      <section className="card">
-        <div className="table-container">
-          <table className="table">
+      <section className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
+          <table className={`table ${isCompact ? "table-compact" : ""}`}>
             <thead>
               <tr>
                 <th onClick={() => handleSort("receiptNo")} style={{ cursor: "pointer" }}>
@@ -326,8 +358,16 @@ const Accounting = () => {
                 /* --- BEKLEYEN SATIŞLAR TABLOSU --- */
                 pendingSales.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem" }}>
-                      Onay bekleyen satış kaydı bulunmamaktadır.
+                    <td colSpan={6} style={{ padding: 0 }}>
+                      <div style={{ textAlign: "center", padding: "3.5rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "var(--success-light)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--success)" }}>
+                          <CheckCircle2 size={24} />
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Onay Bekleyen Sipariş Yok</div>
+                        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", maxWidth: "360px", margin: 0 }}>
+                          Tüm satış kayıtları muhasebe tarafından işlenmiş veya onaylanmıştır.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -357,10 +397,10 @@ const Accounting = () => {
                         <button
                           onClick={() => handleOpenReview(sale)}
                           className="btn btn-primary btn-sm"
-                          style={{ gap: "0.25rem", padding: "0.35rem 0.65rem" }}
+                          style={{ gap: "0.35rem" }}
                         >
-                          {user.role === "admin" ? <Eye size={14} /> : <FileSearch size={14} />}
-                          <span>{user.role === "admin" ? "Görüntüle" : "İncele"}</span>
+                          <FileSearch size={14} />
+                          <span>İncele</span>
                         </button>
                       </td>
                     </tr>
@@ -370,8 +410,16 @@ const Accounting = () => {
                 /* --- ARŞİVLENMİŞ SATIŞLAR TABLOSU --- */
                 archivedSales.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem" }}>
-                      Arşivde kayıtlı satış bulunmamaktadır.
+                    <td colSpan={7} style={{ padding: 0 }}>
+                      <div style={{ textAlign: "center", padding: "3.5rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "var(--bg-tertiary)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
+                          <FileSearch size={24} />
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Arşivde Kayıt Bulunmuyor</div>
+                        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", maxWidth: "360px", margin: 0 }}>
+                          Henüz onaylanan veya reddedilen bir satış kaydı arşivlenmedi.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (

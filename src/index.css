@@ -237,6 +237,19 @@ h6 {
   animation: slideUp var(--transition-normal) forwards;
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border-color) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
 /* Kartlar ve Paneller */
 .card {
   background-color: var(--bg-secondary);
@@ -316,6 +329,11 @@ h6 {
   transition: all var(--transition-fast);
   font-size: 0.95rem;
   white-space: nowrap;
+  user-select: none;
+}
+
+.btn:active {
+  transform: scale(0.97);
 }
 
 .btn-primary {
@@ -370,6 +388,58 @@ h6 {
   border-radius: var(--radius-sm);
 }
 
+/* Filtre Hapları / Pill Badges */
+.filter-pills {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.filter-pill:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.filter-pill.active {
+  background-color: var(--primary-strong);
+  color: #fff;
+  border-color: var(--primary-strong);
+  box-shadow: 0 2px 8px rgba(30, 58, 138, 0.25);
+}
+
+.filter-pill .pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.filter-pill.active .pill-count {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
 /* Tablolar */
 .table-container {
   width: 100%;
@@ -404,6 +474,16 @@ h6 {
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
   background-color: var(--bg-secondary);
+}
+
+.table-compact th {
+  padding: 0.55rem 0.85rem;
+  font-size: 0.82rem;
+}
+
+.table-compact td {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
 }
 
 .table tbody tr:nth-child(even) td {

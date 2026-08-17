@@ -24,7 +24,7 @@ jobs:
       - name: Build Project
         run: npm run build
         env:
-          VITE_FIREBASE_API_KEY: "AIzaSyDbtwV8JVqqiC7fTRaHmOoCEjWn2sYYUP8"
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY || secrets.FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: "ozkon-celik-takip.firebaseapp.com"
           VITE_FIREBASE_PROJECT_ID: "ozkon-celik-takip"
           VITE_FIREBASE_STORAGE_BUCKET: "ozkon-celik-takip.firebasestorage.app"

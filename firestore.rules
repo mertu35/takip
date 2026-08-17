@@ -5,7 +5,9 @@ service cloud.firestore {
 
     // Kullanıcının rolünü çeken yardımcı fonksiyon
     function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : 'sales';
     }
 
     // Giriş yapılıp yapılmadığını kontrol eden yardımcı fonksiyon
@@ -30,59 +32,43 @@ service cloud.firestore {
 
     // --- CUSTOMERS KOLEKSİYONU ---
     match /customers/{customerId} {
-      allow read, create: if isSignedIn();
-      // Müşteri silme/düzenleme sadece yöneticilere açık (satışçılar başkasının müşterisini silemez)
-      allow update, delete: if isSignedIn() && isAdminOrSysadmin();
+      allow read, create, update: if isSignedIn();
+      allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
 
     // --- PRODUCTS KOLEKSİYONU ---
     match /products/{productId} {
-      allow read: if isSignedIn();
-      // Admin/sysadmin tam erişim; satış ve muhasebe sadece stok alanını güncelleyebilir (satış, iptal/iade ve miktar düzeltme)
-      allow create, delete: if isSignedIn() && isAdminOrSysadmin();
-      allow update: if isSignedIn() && (
-        isAdminOrSysadmin() ||
-        ((getUserRole() == 'sales' || getUserRole() == 'accounting') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock']))
-      );
+      allow read, create, update: if isSignedIn();
+      // Ürünü tamamen silme yetkisi yalnızca yöneticilere aittir
+      allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
 
     // --- CATEGORIES KOLEKSİYONU ---
     match /categories/{categoryId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isAdminOrSysadmin();
+      allow read, create, update: if isSignedIn();
+      allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
 
     // --- SALES KOLEKSİYONU ---
     match /sales/{saleId} {
-      // Satışçılar sadece kendi satışlarını okuyabilir; admin/muhasebe/sysadmin hepsini görebilir
-      allow read: if isSignedIn() && (
-        isAdminOrSysadmin() ||
-        getUserRole() == 'accounting' ||
-        resource.data.salespersonId == request.auth.uid
-      );
-      allow create: if isSignedIn() && (getUserRole() == 'sales' || isAdminOrSysadmin());
+      allow read, create: if isSignedIn();
       allow update: if isSignedIn() && (
         isAdminOrSysadmin() ||
         getUserRole() == 'accounting' ||
-        (getUserRole() == 'sales' && resource.data.salespersonId == request.auth.uid &&
-          (resource.data.status == 'pending_accounting' || resource.data.status == 'rejected'))
+        resource.data.salespersonId == request.auth.uid
       );
       allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
 
     // --- APPROVALS KOLEKSİYONU ---
     match /approvals/{approvalId} {
-      allow read: if isSignedIn() && (isAdminOrSysadmin() || getUserRole() == 'accounting');
-      allow write: if isSignedIn() && (isAdminOrSysadmin() || getUserRole() == 'accounting');
+      allow read, write: if isSignedIn();
     }
 
     // --- LOGS KOLEKSİYONU ---
     match /logs/{logId} {
-      // Sadece admin ve sysadmin okuyabilir
       allow read: if isSignedIn() && isAdminOrSysadmin();
-      // Loglar yalnızca sistem tarafından yazılır; kullanıcılar kendi işlemlerini kaydedebilir
-      // ama log içeriğini manipüle edemezler (update/delete yasak)
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
       allow update, delete: if false;
     }
 
@@ -94,11 +80,8 @@ service cloud.firestore {
 
     // --- NOTIFICATIONS KOLEKSİYONU ---
     match /notifications/{notifId} {
-      // Kullanıcı sadece kendi bildirimlerini okuyabilir
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      // Sistem (muhasebe/admin) bildirim yazabilir
-      allow create: if isSignedIn() && (isAdminOrSysadmin() || getUserRole() == 'accounting');
-      // Kullanıcı kendi bildirimini "okundu" olarak işaretleyebilir (sadece read alanı)
+      allow create: if isSignedIn();
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if false;
@@ -112,10 +95,7 @@ service cloud.firestore {
 
     // --- COUNTERS KOLEKSİYONU ---
     match /counters/{counterId} {
-      // Okuma herkese açık (fiş no üretimi için gerekli)
-      allow read: if isSignedIn();
-      // Yazma sadece satış oluşturabilecek roller için
-      allow write: if isSignedIn() && (getUserRole() == 'sales' || isAdminOrSysadmin());
+      allow read, write: if isSignedIn();
     }
   }
 }

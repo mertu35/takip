@@ -15,12 +15,12 @@ export interface FirebaseConfig {
 
 // Çevre değişkenlerinden Firebase yapılandırmasını al
 const firebaseConfig: FirebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDbtwV8JVqqiC7fTRaHmOoCEjWn2sYYUP8",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "ozkon-celik-takip.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "ozkon-celik-takip",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "ozkon-celik-takip.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "351331034390",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:351331034390:web:5651cab58d7e3b87329c37"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
 };
 
 let app: FirebaseApp | null = null;

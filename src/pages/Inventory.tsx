@@ -6,7 +6,8 @@ import {
   addProduct,
   updateProduct,
   deleteProduct,
-  addCategory
+  addCategory,
+  getCompanyProfile
 } from "../services/db";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -20,9 +21,19 @@ import {
   FolderPlus,
   Download,
   Upload,
-  FileSpreadsheet
+  FileSpreadsheet,
+  PackageSearch,
+  Rows3,
+  CheckCircle2,
+  XCircle,
+  PackageCheck,
+  Camera,
+  Sparkles,
+  Printer
 } from "lucide-react";
-import type { Product, Category } from "../types";
+import BarcodeScanner from "../components/BarcodeScanner";
+import BarcodeLabelModal from "../components/BarcodeLabelModal";
+import type { Product, Category, CompanyProfile } from "../types";
 
 interface ImportRowError {
   row: number;
@@ -50,14 +61,47 @@ const Inventory = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [filterCriticalOnly, setFilterCriticalOnly] = useState(false);
+  const [stockFilter, setStockFilter] = useState<"all" | "critical" | "out_of_stock" | "in_stock">("all");
+  const [isCompact, setIsCompact] = useState<boolean>(() => {
+    return localStorage.getItem("takip_inventory_compact") === "true";
+  });
+
+  const toggleCompact = () => {
+    const next = !isCompact;
+    setIsCompact(next);
+    localStorage.setItem("takip_inventory_compact", next ? "true" : "false");
+  };
 
   const [showProductModal, setShowProductModal] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [selectedProductId, setSelectedProductId] = useState("");
   const [productForm, setProductForm] = useState<Record<string, any>>({
-    code: "", name: "", categoryId: "", price: 0, stock: 0, criticalStock: 5, unit: "Adet"
+    code: "", name: "", categoryId: "", price: 0, stock: 0, criticalStock: 5, unit: "Adet", barcode: ""
   });
+  const [showScanner, setShowScanner] = useState(false);
+  const [labelProduct, setLabelProduct] = useState<Product | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
+
+  const handleBarcodeDetected = (code: string) => {
+    setShowScanner(false);
+    setProductForm((prev) => ({ ...prev, barcode: code }));
+    showToast(`Barkod okundu: ${code}`, "success");
+  };
+
+  const handleGenerateBarcode = () => {
+    // 869 (Türkiye ülke kodu) + 9 rastgele rakam + EAN-13 kontrol basamağı
+    const prefix = "869";
+    const randomDigits = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10)).join("");
+    const raw12 = prefix + randomDigits;
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      sum += parseInt(raw12[i]) * (i % 2 === 0 ? 1 : 3);
+    }
+    const checkDigit = (10 - (sum % 10)) % 10;
+    const generated = raw12 + checkDigit;
+    setProductForm((prev) => ({ ...prev, barcode: generated }));
+    showToast("Otomatik 13 haneli barkod üretildi: " + generated, "success");
+  };
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categoryForm, setCategoryForm] = useState({ name: "", description: "" });
@@ -77,9 +121,10 @@ const Inventory = () => {
       if (e.key === "Escape") {
         setShowProductModal(false);
         setShowCategoryModal(false);
+        setLabelProduct(null);
       }
     };
-    if (showProductModal || showCategoryModal) {
+    if (showProductModal || showCategoryModal || labelProduct) {
       window.addEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "hidden";
     } else {
@@ -89,12 +134,10 @@ const Inventory = () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "unset";
     };
-  }, [showProductModal, showCategoryModal]);
+  }, [showProductModal, showCategoryModal, labelProduct]);
 
-  const handleOverlayClick = (e: React.MouseEvent, closeFn: (v: boolean) => void) => {
-    if ((e.target as HTMLElement).className === "modal-overlay") {
-      closeFn(false);
-    }
+  const handleOverlayClick = (_e: React.MouseEvent, _closeFn: (v: boolean) => void) => {
+    // Formlar doldurulurken dış boşluğa kazara tıklanınca modalın kapanması engellendi
   };
 
   const handleSort = (field: keyof Product) => {
@@ -108,9 +151,14 @@ const Inventory = () => {
 
   const fetchInventoryData = async () => {
     try {
-      const [prodData, catData] = await Promise.all([getProducts(), getCategories()]);
+      const [prodData, catData, profileData] = await Promise.all([
+        getProducts(),
+        getCategories(),
+        getCompanyProfile()
+      ]);
       setProducts(prodData);
       setCategories(catData);
+      setCompanyProfile(profileData);
     } catch (err) {
       console.error("Stok verileri yüklenirken hata:", err);
     } finally {
@@ -121,17 +169,34 @@ const Inventory = () => {
   if (loading) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
-        <section className="card" style={{ height: "80px" }}>
-          <div className="skeleton-row" style={{ width: "20%" }} />
+        <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div className="skeleton" style={{ width: "180px", height: "24px" }} />
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div className="skeleton" style={{ width: "100px", height: "36px" }} />
+              <div className="skeleton" style={{ width: "120px", height: "36px" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div className="skeleton" style={{ width: "90px", height: "32px", borderRadius: "999px" }} />
+            <div className="skeleton" style={{ width: "110px", height: "32px", borderRadius: "999px" }} />
+            <div className="skeleton" style={{ width: "100px", height: "32px", borderRadius: "999px" }} />
+          </div>
         </section>
-        <section className="card">
-          <div className="skeleton-loader-container">
-            <div className="skeleton-row title" />
-            <div className="skeleton-row" />
-            <div className="skeleton-row" />
-            <div className="skeleton-row" />
-            <div className="skeleton-row" />
-            <div className="skeleton-row" />
+
+        <section className="card" style={{ padding: "1.5rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 1fr 1fr 1fr 1fr", gap: "1rem", alignItems: "center", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-color)" }}>
+                <div className="skeleton" style={{ height: "18px", width: "80%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "90%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "70%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "60%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "65%" }} />
+                <div className="skeleton" style={{ height: "18px", width: "50%" }} />
+                <div className="skeleton" style={{ height: "28px", width: "60px", borderRadius: "6px" }} />
+              </div>
+            ))}
           </div>
         </section>
       </div>
@@ -179,11 +244,6 @@ const Inventory = () => {
     e.preventDefault();
 
     const newErrors: Record<string, string> = {};
-    if (!productForm.code.trim()) {
-      newErrors.code = "Ürün kodu boş bırakılamaz.";
-    } else if (productForm.code.trim().length < 3) {
-      newErrors.code = "Ürün kodu en az 3 karakter olmalıdır.";
-    }
 
     if (!productForm.name.trim()) {
       newErrors.name = "Ürün adı boş bırakılamaz.";
@@ -207,11 +267,27 @@ const Inventory = () => {
       return;
     }
 
+    // Barkod girilmemişse otomatik 13 haneli EAN-13 barkod ata
+    let finalBarcode = (productForm.barcode || "").trim();
+    if (!finalBarcode) {
+      const prefix = "869";
+      const randomDigits = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10)).join("");
+      const raw12 = prefix + randomDigits;
+      let sum = 0;
+      for (let i = 0; i < 12; i++) {
+        sum += parseInt(raw12[i]) * (i % 2 === 0 ? 1 : 3);
+      }
+      const checkDigit = (10 - (sum % 10)) % 10;
+      finalBarcode = raw12 + checkDigit;
+    }
+
     const cat = categories.find(c => c.id === productForm.categoryId);
     const categoryName = cat ? cat.name : "Kategorisiz";
 
     const payload = {
       ...productForm,
+      code: finalBarcode,
+      barcode: finalBarcode,
       price: parseFloat(productForm.price) || 0,
       costPrice: parseFloat(productForm.costPrice) || 0,
       taxRate: parseInt(productForm.taxRate, 10) || 20,
@@ -253,16 +329,18 @@ const Inventory = () => {
 
   const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!categoryForm.name) {
+    if (!categoryForm.name.trim()) {
       showToast("Kategori adı zorunludur!", "warning");
       return;
     }
 
     try {
-      await addCategory(categoryForm, user!.uid, user!.displayName, user!.role);
-      showToast("Yeni Kategori başarıyla oluşturuldu.", "success");
+      const createdCategory = await addCategory(categoryForm, user!.uid, user!.displayName, user!.role);
+      showToast(`"${createdCategory.name}" kategorisi başarıyla oluşturuldu.`, "success");
       setShowCategoryModal(false);
       setCategoryForm({ name: "", description: "" });
+      setCategories((prev) => [...prev, createdCategory].sort((a, b) => a.name.localeCompare(b.name, "tr")));
+      setProductForm((prev) => ({ ...prev, categoryId: createdCategory.id }));
       fetchInventoryData();
     } catch (err: any) {
       showToast("Kategori ekleme hatası: " + err.message, "error");
@@ -426,15 +504,28 @@ const Inventory = () => {
     fetchInventoryData();
   };
 
+  const totalCount = products.length;
+  const criticalCount = products.filter(p => p.stock > 0 && p.stock <= p.criticalStock).length;
+  const outOfStockCount = products.filter(p => p.stock === 0).length;
+  const inStockCount = products.filter(p => p.stock > p.criticalStock).length;
+
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.barcode && p.barcode.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesCategory = selectedCategory === "all" || p.categoryId === selectedCategory;
-    const matchesCritical = !filterCriticalOnly || p.stock <= p.criticalStock;
 
-    return matchesSearch && matchesCategory && matchesCritical;
+    let matchesStock = true;
+    if (stockFilter === "critical") {
+      matchesStock = p.stock > 0 && p.stock <= p.criticalStock;
+    } else if (stockFilter === "out_of_stock") {
+      matchesStock = p.stock === 0;
+    } else if (stockFilter === "in_stock") {
+      matchesStock = p.stock > p.criticalStock;
+    }
+
+    return matchesSearch && matchesCategory && matchesStock;
   }).sort((a, b) => {
     let aVal: any = a[sortField];
     let bVal: any = b[sortField];
@@ -455,10 +546,15 @@ const Inventory = () => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
 
-      <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Stok Kontrol Listesi</h3>
+          <div>
+            <h3 style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0 }}>Stok Kontrol Listesi</h3>
+            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
+              Toplam {totalCount} kayıtlı ürün envanteri
+            </div>
+          </div>
 
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             {(user.role === "admin" || user.role === "sysadmin") && (
@@ -476,12 +572,12 @@ const Inventory = () => {
                   <span>Excel'den İçe Aktar</span>
                   <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={handleImportFile} />
                 </label>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowCategoryModal(true)}>
-                  <FolderPlus size={16} />
-                  <span>Kategori Ekle</span>
-                </button>
               </>
             )}
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowCategoryModal(true)}>
+              <FolderPlus size={16} />
+              <span>Kategori Ekle</span>
+            </button>
             <button className="btn btn-primary btn-sm" onClick={handleOpenAddProduct}>
               <Plus size={16} />
               <span>Yeni Ürün Ekle</span>
@@ -489,9 +585,50 @@ const Inventory = () => {
           </div>
         </div>
 
-        <div style={{ borderBottom: "1px solid var(--border-color)", margin: "0.25rem 0" }}></div>
+        {/* Hızlı Filtre Hapları (Pill Badges) */}
+        <div className="filter-pills">
+          <button
+            type="button"
+            className={`filter-pill ${stockFilter === "all" ? "active" : ""}`}
+            onClick={() => setStockFilter("all")}
+          >
+            <span>Tümü</span>
+            <span className="pill-count">{totalCount}</span>
+          </button>
+          <button
+            type="button"
+            className={`filter-pill ${stockFilter === "in_stock" ? "active" : ""}`}
+            onClick={() => setStockFilter("in_stock")}
+          >
+            <PackageCheck size={14} />
+            <span>Yeterli Stok</span>
+            <span className="pill-count">{inStockCount}</span>
+          </button>
+          <button
+            type="button"
+            className={`filter-pill ${stockFilter === "critical" ? "active" : ""}`}
+            onClick={() => setStockFilter("critical")}
+            style={stockFilter === "critical" ? {} : criticalCount > 0 ? { borderColor: "var(--warning)", color: "var(--warning)" } : {}}
+          >
+            <AlertTriangle size={14} />
+            <span>Kritik Stok</span>
+            <span className="pill-count" style={stockFilter === "critical" ? {} : criticalCount > 0 ? { backgroundColor: "var(--warning-light)", color: "var(--warning)" } : {}}>{criticalCount}</span>
+          </button>
+          <button
+            type="button"
+            className={`filter-pill ${stockFilter === "out_of_stock" ? "active" : ""}`}
+            onClick={() => setStockFilter("out_of_stock")}
+            style={stockFilter === "out_of_stock" ? {} : outOfStockCount > 0 ? { borderColor: "var(--danger)", color: "var(--danger)" } : {}}
+          >
+            <XCircle size={14} />
+            <span>Tükenenler</span>
+            <span className="pill-count" style={stockFilter === "out_of_stock" ? {} : outOfStockCount > 0 ? { backgroundColor: "var(--danger-light)", color: "var(--danger)" } : {}}>{outOfStockCount}</span>
+          </button>
+        </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "1rem" }} className="grid-cols-3">
+        <div style={{ borderBottom: "1px solid var(--border-color)", margin: "0.15rem 0" }}></div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr auto", gap: "1rem", alignItems: "center" }} className="grid-cols-3">
           <div style={{ position: "relative" }}>
             <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
               <Search size={16} />
@@ -517,38 +654,26 @@ const Inventory = () => {
             ))}
           </select>
 
-          <label style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            cursor: "pointer",
-            fontWeight: 500,
-            fontSize: "0.875rem",
-            color: filterCriticalOnly ? "var(--danger)" : "var(--text-secondary)",
-            padding: "0.5rem",
-            borderRadius: "var(--radius-sm)",
-            backgroundColor: filterCriticalOnly ? "var(--danger-light)" : "transparent",
-            transition: "all var(--transition-fast)"
-          }}>
-            <input
-              type="checkbox"
-              checked={filterCriticalOnly}
-              onChange={(e) => setFilterCriticalOnly(e.target.checked)}
-              style={{ width: "16px", height: "16px" }}
-            />
-            <AlertTriangle size={16} />
-            <span>Kritik Stok Uyarısı</span>
-          </label>
+          <button
+            type="button"
+            className={`btn btn-secondary btn-sm ${isCompact ? "btn-primary" : ""}`}
+            onClick={toggleCompact}
+            title={isCompact ? "Standart satır aralığına geç" : "Daha fazla satır görmek için aralıkları daralt"}
+            style={{ height: "40px" }}
+          >
+            <Rows3 size={16} />
+            <span>{isCompact ? "Kompakt" : "Normal"}</span>
+          </button>
         </div>
       </section>
 
-      <section className="card">
-        <div className="table-container">
-          <table className="table">
+      <section className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
+          <table className={`table ${isCompact ? "table-compact" : ""}`}>
             <thead>
               <tr>
                 <th onClick={() => handleSort("code")} style={{ cursor: "pointer" }}>
-                  KOD / Barkod {sortField === "code" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                  Barkod {sortField === "code" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
                 </th>
                 <th onClick={() => handleSort("name")} style={{ cursor: "pointer" }}>
                   Ürün Adı {sortField === "name" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
@@ -576,8 +701,30 @@ const Inventory = () => {
             <tbody>
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem" }}>
-                    Aranan kriterlere uygun ürün bulunamadı.
+                  <td colSpan={10} style={{ padding: 0 }}>
+                    <div style={{ textAlign: "center", padding: "3.5rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+                      <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "var(--bg-tertiary)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
+                        <PackageSearch size={24} />
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: "1rem" }}>Aranan kriterlere uygun ürün bulunamadı</div>
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", maxWidth: "360px", margin: 0 }}>
+                        Arama teriminizi değiştirebilir veya uygulanan filtreleri sıfırlayabilirsiniz.
+                      </p>
+                      {(searchQuery || selectedCategory !== "all" || stockFilter !== "all") && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ marginTop: "0.5rem" }}
+                          onClick={() => {
+                            setSearchQuery("");
+                            setSelectedCategory("all");
+                            setStockFilter("all");
+                          }}
+                        >
+                          Filtreleri Temizle
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -626,6 +773,15 @@ const Inventory = () => {
                       <td>
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                           <button
+                            type="button"
+                            onClick={() => setLabelProduct(p)}
+                            style={{ color: "var(--text-secondary)", cursor: "pointer" }}
+                            title="Barkod Etiketi Yazdır"
+                          >
+                            <Printer size={16} />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleOpenEditProduct(p)}
                             style={{ color: "var(--primary)", cursor: "pointer" }}
                             title="Ürünü Düzenle"
@@ -633,6 +789,7 @@ const Inventory = () => {
                             <Edit size={16} />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDeleteProduct(p.id, p.name)}
                             style={{ color: "var(--danger)", cursor: "pointer" }}
                             title="Ürünü Sil"
@@ -661,53 +818,80 @@ const Inventory = () => {
             </div>
             <form onSubmit={handleProductSubmit}>
               <div className="modal-body">
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                  <div className="form-group">
-                    <label className="form-label">Ürün Kodu / SKU</label>
-                    <input
-                      type="text"
-                      className={`form-control ${errors.code ? "is-invalid" : ""}`}
-                      value={productForm.code}
-                      onChange={(e) => {
-                        setProductForm({ ...productForm, code: e.target.value.toUpperCase() });
-                        if (errors.code) setErrors({ ...errors, code: null });
-                      }}
-                      placeholder="OFIS-001"
-                      required
-                    />
-                    {errors.code && <div className="invalid-feedback">{errors.code}</div>}
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Ürün Adı</label>
-                    <input
-                      type="text"
-                      className={`form-control ${errors.name ? "is-invalid" : ""}`}
-                      value={productForm.name}
-                      onChange={(e) => {
-                        setProductForm({ ...productForm, name: e.target.value });
-                        if (errors.name) setErrors({ ...errors, name: null });
-                      }}
-                      placeholder="A4 Fotokopi Kağıdı"
-                      required
-                    />
-                    {errors.name && <div className="invalid-feedback">{errors.name}</div>}
-                  </div>
+                <div className="form-group">
+                  <label className="form-label">Ürün Adı *</label>
+                  <input
+                    type="text"
+                    className={`form-control ${errors.name ? "is-invalid" : ""}`}
+                    value={productForm.name}
+                    onChange={(e) => {
+                      setProductForm({ ...productForm, name: e.target.value });
+                      if (errors.name) setErrors({ ...errors, name: null });
+                    }}
+                    placeholder="Örn: Duvar Kağıdı, Çelik Profil 40x40"
+                    required
+                  />
+                  {errors.name && <div className="invalid-feedback">{errors.name}</div>}
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Barkod Numarası <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(opsiyonel)</span></label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem", flexWrap: "wrap", gap: "0.3rem" }}>
+                    <label className="form-label" style={{ margin: 0 }}>
+                      Barkod Numarası <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(boşsa otomatik üretilir)</span>
+                    </label>
+                    <div style={{ display: "flex", gap: "0.4rem" }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: "0.2rem 0.55rem", fontSize: "0.75rem", gap: "0.3rem", height: "auto" }}
+                        onClick={() => setShowScanner(true)}
+                        title="Kamerayı açarak ürünün üzerindeki barkodu okut"
+                      >
+                        <Camera size={13} />
+                        <span>Kamera ile Oku</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: "0.2rem 0.55rem", fontSize: "0.75rem", gap: "0.3rem", height: "auto" }}
+                        onClick={handleGenerateBarcode}
+                        title="Bu ürün için benzersiz bir EAN-13 barkod numarası üret"
+                      >
+                        <Sparkles size={13} />
+                        <span>Otomatik Üret</span>
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     className="form-control"
-                    value={productForm.barcode}
+                    value={productForm.barcode || ""}
                     onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
-                    placeholder="Ürün üzerindeki barkod numarası"
+                    placeholder="Örn: 8690123456789 veya yukarıdaki butonla okutun"
                   />
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                   <div className="form-group">
-                    <label className="form-label">Kategori</label>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
+                      <label className="form-label" style={{ margin: 0 }}>Kategori *</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryModal(true)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--primary)",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          padding: 0
+                        }}
+                        title="Listede olmayan yeni bir kategori oluştur"
+                      >
+                        + Yeni Kategori
+                      </button>
+                    </div>
                     <select
                       className="form-control"
                       value={productForm.categoryId}
@@ -871,7 +1055,7 @@ const Inventory = () => {
       )}
 
       {showImportModal && (
-        <div className="modal-overlay" onClick={(e) => { if ((e.target as HTMLElement).className === "modal-overlay") { setShowImportModal(false); setImportResult(null); } }}>
+        <div className="modal-overlay">
           <div className="modal-content animate-slide-up" style={{ maxWidth: "860px", maxHeight: "90vh", display: "flex", flexDirection: "column" }} role="dialog" aria-modal="true">
             <div className="modal-header">
               <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -980,6 +1164,23 @@ const Inventory = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Kamera Barkod Okuyucu */}
+      {showScanner && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
+      {/* Barkod Etiketi Yazdırma Modalı */}
+      {labelProduct && (
+        <BarcodeLabelModal
+          product={labelProduct}
+          companyProfile={companyProfile}
+          onClose={() => setLabelProduct(null)}
+        />
       )}
 
     </div>
