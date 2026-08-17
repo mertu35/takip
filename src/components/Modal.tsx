@@ -16,12 +16,22 @@ interface ModalProps {
   footer?: ReactNode;
   maxWidth?: string;
   zIndex?: number;
+  closeOnBackdropClick?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = "600px", zIndex = 1000 }: ModalProps) => {
+const Modal = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  footer,
+  maxWidth = "600px",
+  zIndex = 1000,
+  closeOnBackdropClick = false
+}: ModalProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
 
@@ -87,7 +97,7 @@ const Modal = ({ isOpen, onClose, title, children, footer, maxWidth = "600px", z
   if (!isOpen) return null;
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
+    if (closeOnBackdropClick && e.target === e.currentTarget) {
       onClose();
     }
   };
