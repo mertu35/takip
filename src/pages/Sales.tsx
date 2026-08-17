@@ -482,7 +482,106 @@ const Sales = () => {
   };
 
   const handlePrintReceipt = () => {
-    window.print();
+    const printElement = document.querySelector(".print-area") as HTMLElement;
+    if (!printElement) {
+      window.print();
+      return;
+    }
+
+    // Capture canvas if any (for barcodes) before cloning
+    const canvases = printElement.querySelectorAll("canvas");
+    const canvasDataUrls: string[] = [];
+    canvases.forEach(canvas => {
+      try {
+        canvasDataUrls.push(canvas.toDataURL());
+      } catch {
+        canvasDataUrls.push("");
+      }
+    });
+
+    // Clone element
+    const cloned = printElement.cloneNode(true) as HTMLElement;
+    const clonedCanvases = cloned.querySelectorAll("canvas");
+    clonedCanvases.forEach((canvas, index) => {
+      if (canvasDataUrls[index]) {
+        const img = document.createElement("img");
+        img.src = canvasDataUrls[index];
+        img.style.display = "block";
+        img.style.margin = "0 auto";
+        img.style.maxHeight = "40px";
+        canvas.parentNode?.replaceChild(img, canvas);
+      }
+    });
+
+    // Create or reuse hidden iframe
+    let iframe = document.getElementById("receipt-print-frame") as HTMLIFrameElement;
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "receipt-print-frame";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+    }
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Satış Fişi - ${lastCreatedSale?.receiptNo || ""}</title>
+          <style>
+            @page {
+              size: auto;
+              margin: 8mm;
+            }
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 13px;
+              color: #000000;
+              background-color: #ffffff;
+              padding: 10px;
+            }
+            .print-wrapper {
+              max-width: 480px;
+              margin: 0 auto;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            img {
+              max-width: 100%;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-wrapper">
+            ${cloned.innerHTML}
+          </div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    }, 250);
   };
 
   const filteredProducts = products.filter(p =>
