@@ -7,7 +7,7 @@ import { logsRepository } from "./logsRepository";
 
 const DEFAULT_PROFILE: CompanyProfile = {
   companyName: "ÖZKON YAPI",
-  address: "Merkez Mah. Çelik Sanayi Bulvarı No: 45 Sarıyer / İstanbul",
+  address: "Merkez Mah. Sanayi Bulvarı No: 45 Sarıyer / İstanbul",
   phone: "0212 999 88 77",
   fax: "0212 999 88 78",
   taxOffice: "Maslak",

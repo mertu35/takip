@@ -1158,7 +1158,7 @@ const Sales = () => {
                   {companyProfile?.companyName || "ÖZKON YAPI"}
                 </h2>
                 <div style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>
-                  {companyProfile?.address || "Merkez Mah. Çelik Sanayi Bulvarı No: 45 Sarıyer / İstanbul"}
+                  {companyProfile?.address || "Merkez Mah. Sanayi Bulvarı No: 45 Sarıyer / İstanbul"}
                 </div>
                 <div style={{ fontSize: "0.75rem" }}>
                   {companyProfile?.phone ? `Tel: ${companyProfile.phone}` : ""}

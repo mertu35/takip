@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { User, Lock, ShieldAlert, Check, HelpCircle, Eye, EyeOff } from "lucide-react";
+import { User, Lock, ShieldAlert, HelpCircle, Eye, EyeOff } from "lucide-react";
 import { isDatabaseInitialized, initializeFirebaseDatabase } from "../services/db";
 import { isFirebaseActive } from "../services/firebase";
 
 const Login = () => {
-  const { loginUser, resetPasswordEmail } = useAuth();
+  const { loginUser } = useAuth();
   const navigate = useNavigate();
 
   // Giriş Bilgileri
@@ -49,11 +49,8 @@ const Login = () => {
     }
   };
 
-  // Şifre Sıfırlama Bilgileri
+  // Şifre Sıfırlama Görünümü
   const [isForgotView, setIsForgotView] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [resetSuccess, setResetSuccess] = useState(false);
-
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,36 +61,25 @@ const Login = () => {
     setError("");
     setLoading(true);
     try {
-      // Eğer kullanıcı adı girildiyse ve @ içermiyorsa, otomatik olarak email formatına çeviriyoruz
-      const loginEmail = email.includes("@") ? email : `${email.trim().toLowerCase()}@takip.com`;
-      await loginUser(loginEmail, password);
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim();
+      const loginEmail = cleanEmail.includes("@") ? cleanEmail : `${cleanEmail}@takip.com`;
+      await loginUser(loginEmail, cleanPassword);
       navigate("/");
     } catch (err: any) {
-      setError(err.message || "Giriş başarısız. Bilgilerinizi kontrol edin.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!forgotEmail) {
-      setError("Lütfen kullanıcı adınızı veya e-posta adresinizi yazın.");
-      return;
-    }
-    setError("");
-    setLoading(true);
-    try {
-      const resetEmail = forgotEmail.includes("@") ? forgotEmail : `${forgotEmail.trim().toLowerCase()}@takip.com`;
-      await resetPasswordEmail(resetEmail);
-      setResetSuccess(true);
-      setTimeout(() => {
-        setIsForgotView(false);
-        setResetSuccess(false);
-        setForgotEmail("");
-      }, 3000);
-    } catch (err: any) {
-      setError(err.message || "Şifre sıfırlama talebi gönderilemedi.");
+      const msg = err.message || "";
+      if (
+        msg.includes("Firebase") ||
+        msg.includes("auth/") ||
+        msg.includes("invalid-credential") ||
+        msg.includes("user-not-found") ||
+        msg.includes("wrong-password") ||
+        msg.includes("e-posta")
+      ) {
+        setError("Hatalı kullanıcı adı ya da şifre!");
+      } else {
+        setError(msg || "Hatalı kullanıcı adı ya da şifre!");
+      }
     } finally {
       setLoading(false);
     }
@@ -134,7 +120,7 @@ const Login = () => {
               margin: "0 auto 0.75rem auto"
             }}
           />
-          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, letterSpacing: "-0.5px", color: "var(--text-primary)" }}>Özkon Çelik</h2>
+          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, letterSpacing: "-0.5px", color: "var(--text-primary)" }}>Özkon Yapı</h2>
           <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
             Satış, Muhasebe Onay ve Yönetim Platformu
           </p>
@@ -203,6 +189,9 @@ const Login = () => {
                   placeholder="örn: admin, satis, muhasebe"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   style={{ paddingLeft: "2.75rem" }}
                   required
                 />
@@ -231,6 +220,9 @@ const Login = () => {
                   placeholder="••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   style={{ paddingLeft: "2.75rem", paddingRight: "2.75rem" }}
                   required
                 />
@@ -263,75 +255,27 @@ const Login = () => {
             </button>
           </form>
         ) : (
-          /* --- ŞİFRE SIFIRLAMA FORMU --- */
-          <form onSubmit={handleForgotSubmit}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.5rem" }}>Şifre Sıfırlama</h3>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.25rem" }}>
-              Hesabınıza ait kullanıcı adınızı girin. Şifre sıfırlama yönergelerini e-posta adresinize göndereceğiz.
+          /* --- ŞİFRE BİLGİLENDİRME --- */
+          <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.75rem" }}>Şifrenizi mi Unuttunuz?</h3>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1.5rem", lineHeight: "1.6" }}>
+              Şifrenizi unuttuysanız veya sıfırlamak istiyorsanız lütfen <strong>Sistem Yöneticiniz (Admin)</strong> ile iletişime geçiniz. 
+              <br /><br />
+              Yöneticiniz <strong>Sistem Ayarları</strong> ekranından şifrenizi anında güncelleyebilir.
             </p>
 
-            {resetSuccess ? (
-              <div style={{
-                backgroundColor: "var(--success-light)",
-                border: "1px solid rgba(16, 185, 129, 0.2)",
-                color: "var(--success)",
-                padding: "0.75rem 1rem",
-                borderRadius: "var(--radius-sm)",
-                fontSize: "0.85rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginBottom: "1.25rem"
-              }}>
-                <Check size={16} />
-                <span>Şifre sıfırlama e-postası başarıyla gönderildi!</span>
-              </div>
-            ) : (
-              <>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="forgot-username">Kullanıcı Adı</label>
-                  <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
-                      <User size={18} />
-                    </span>
-                    <input
-                      id="forgot-username"
-                      type="text"
-                      className="form-control"
-                      placeholder="örn: admin, satis"
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      style={{ paddingLeft: "2.75rem" }}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ flex: 1 }}
-                    onClick={() => {
-                      setIsForgotView(false);
-                      setError("");
-                    }}
-                    disabled={loading}
-                  >
-                    Vazgeç
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    style={{ flex: 1 }}
-                    disabled={loading}
-                  >
-                    Gönder
-                  </button>
-                </div>
-              </>
-            )}
-          </form>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: "100%" }}
+              onClick={() => {
+                setIsForgotView(false);
+                setError("");
+              }}
+            >
+              Giriş Ekranına Dön
+            </button>
+          </div>
         )}
       </div>
     </div>

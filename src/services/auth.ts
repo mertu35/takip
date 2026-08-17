@@ -45,29 +45,43 @@ const triggerMockAuthChange = (user: AppUser | null) => {
 
 export const login = async (email: string, password: string): Promise<AppUser> => {
   if (isFirebaseActive) {
-    const userCredential = await signInWithEmailAndPassword(auth!, email, password);
-    const userDocRef = doc(firestore!, "users", userCredential.user.uid);
-    const userDoc = await getDoc(userDocRef);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth!, email, password);
+      const userDocRef = doc(firestore!, "users", userCredential.user.uid);
+      const userDoc = await getDoc(userDocRef);
 
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      if (data.disabled) {
-        await signOut(auth!);
-        throw new Error("Hesabınız devre dışı bırakılmıştır!");
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        if (data.disabled) {
+          await signOut(auth!);
+          throw new Error("Hesabınız devre dışı bırakılmıştır!");
+        }
+        return {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email || email,
+          ...(data as Omit<AppUser, "uid" | "email">)
+        } as AppUser;
+      } else {
+        throw new Error("Kullanıcı profil verisi bulunamadı!");
       }
-      return {
-        uid: userCredential.user.uid,
-        email: userCredential.user.email || email,
-        ...(data as Omit<AppUser, "uid" | "email">)
-      } as AppUser;
-    } else {
-      throw new Error("Kullanıcı profil verisi bulunamadı!");
+    } catch (fbErr: any) {
+      if (fbErr.code === "auth/invalid-credential" ||
+          fbErr.code === "auth/user-not-found" ||
+          fbErr.code === "auth/wrong-password" ||
+          fbErr.code === "auth/invalid-email") {
+        throw new Error("Hatalı kullanıcı adı ya da şifre!");
+      } else if (fbErr.code === "auth/too-many-requests") {
+        throw new Error("Çok fazla hatalı deneme yapıldı. Lütfen biraz bekleyin.");
+      } else if (fbErr.code === "auth/network-request-failed") {
+        throw new Error("İnternet bağlantısı hatası! Lütfen bağlantınızı kontrol edin.");
+      }
+      throw new Error(fbErr.message || "Hatalı kullanıcı adı ya da şifre!");
     }
   } else {
     const users = getLocalUsers();
     const foundUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
-    if (!foundUser) throw new Error("E-posta adresi sistemde kayıtlı değil!");
+    if (!foundUser) throw new Error("Hatalı kullanıcı adı ya da şifre!");
     if (foundUser.disabled) throw new Error("Hesabınız devre dışı bırakılmıştır!");
 
     let isPasswordCorrect = false;
@@ -83,7 +97,7 @@ export const login = async (email: string, password: string): Promise<AppUser> =
       isPasswordCorrect = allowedPasswords.includes(password);
     }
 
-    if (!isPasswordCorrect) throw new Error("Hatalı şifre! Lütfen şifrenizi kontrol edin.");
+    if (!isPasswordCorrect) throw new Error("Hatalı kullanıcı adı ya da şifre!");
 
     triggerMockAuthChange(foundUser);
     return foundUser;
@@ -163,41 +177,44 @@ export const registerUser = async (
     throw new Error("Bu işlem için yönetici yetkisi gereklidir!");
   }
 
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password && password.trim() ? password.trim() : "123456";
+
   if (isFirebaseActive) {
     try {
       const tempAppName = "TempApp_" + Math.random().toString(36).substring(2, 11);
       const tempApp = initializeApp(firebaseConfig, tempAppName);
       const tempAuth = getAuth(tempApp);
 
-      const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(tempAuth, cleanEmail, cleanPassword);
       const uid = userCredential.user.uid;
 
       await deleteApp(tempApp);
 
       await setDoc(doc(firestore!, "users", uid), {
         uid,
-        email,
+        email: cleanEmail,
         displayName,
         role,
         createdAt: new Date().toISOString()
       });
 
-      return { uid, email, displayName, role };
+      return { uid, email: cleanEmail, displayName, role };
     } catch (error: any) {
       console.error("Firebase kullanıcı oluşturma hatası:", error);
       throw new Error("Kullanıcı oluşturulamadı: " + error.message);
     }
   } else {
     const users = getLocalUsers();
-    if (users.find((u) => u.email.toLowerCase() === email.toLowerCase())) {
+    if (users.find((u) => u.email.toLowerCase() === cleanEmail)) {
       throw new Error("Bu e-posta adresiyle zaten bir kullanıcı kayıtlı!");
     }
     const newUser: AppUser = {
       uid: "user-" + Math.random().toString(36).substring(2, 11),
-      email,
+      email: cleanEmail,
       displayName,
       role,
-      password,
+      password: cleanPassword,
       createdAt: new Date().toISOString()
     };
     users.push(newUser);
@@ -209,6 +226,46 @@ export const registerUser = async (
     const { password: _pwd, ...safeUser } = newUser;
     return safeUser as AppUser;
   }
+};
+
+export const updateUser = async (
+  userId: string,
+  updatedFields: { displayName: string; role: Role },
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+): Promise<void> => {
+  if (isFirebaseActive) {
+    const docRef = doc(firestore!, "users", userId);
+    await updateDoc(docRef, {
+      displayName: updatedFields.displayName,
+      role: updatedFields.role
+    });
+  } else {
+    const users = getLocalUsers();
+    const idx = users.findIndex((u) => u.uid === userId);
+    if (idx !== -1) {
+      users[idx].displayName = updatedFields.displayName;
+      users[idx].role = updatedFields.role;
+      localStorage.setItem("takip_users", JSON.stringify(users));
+
+      const current = safeParse<AppUser | null>(localStorage.getItem("takip_current_user"), null);
+      if (current && current.uid === userId) {
+        current.displayName = updatedFields.displayName;
+        current.role = updatedFields.role;
+        localStorage.setItem("takip_current_user", JSON.stringify(current));
+      }
+    } else {
+      throw new Error("Kullanıcı bulunamadı!");
+    }
+  }
+  await addLog(
+    currentUserId,
+    currentUserName,
+    currentUserRole,
+    "UPDATE_USER",
+    `"${updatedFields.displayName}" isimli personelin bilgileri (Rol: ${updatedFields.role}) güncellendi.`
+  );
 };
 
 export const updateUserRole = async (

@@ -38,11 +38,11 @@ service cloud.firestore {
     // --- PRODUCTS KOLEKSİYONU ---
     match /products/{productId} {
       allow read: if isSignedIn();
-      // Admin/sysadmin tam erişim; satışçılar sadece stok alanını güncelleyebilir (satış/resubmit işlemi)
+      // Admin/sysadmin tam erişim; satış ve muhasebe sadece stok alanını güncelleyebilir (satış, iptal/iade ve miktar düzeltme)
       allow create, delete: if isSignedIn() && isAdminOrSysadmin();
       allow update: if isSignedIn() && (
         isAdminOrSysadmin() ||
-        (getUserRole() == 'sales' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock']))
+        ((getUserRole() == 'sales' || getUserRole() == 'accounting') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock']))
       );
     }
 

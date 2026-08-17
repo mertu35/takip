@@ -1,6 +1,5 @@
-// Takip Sistemi - Sistem Ayarları Ekranı (Settings)
 import React, { useState, useEffect } from "react";
-import { registerUser, updateUserRole, deleteUser } from "../services/auth";
+import { registerUser, updateUser, deleteUser } from "../services/auth";
 import { getCustomers, getProducts, getSales, exportBackupData, importBackupData, getAnnouncements, addAnnouncement, deleteAnnouncement, getCompanyProfile, updateCompanyProfile } from "../services/db";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -14,7 +13,10 @@ import {
   Check,
   UserCheck,
   Trash2,
-  Building
+  Building,
+  SquarePen,
+  AlertTriangle,
+  X
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { isFirebaseActive, firestore } from "../services/firebase";
@@ -28,8 +30,19 @@ const SettingsPage = () => {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Düzenleme Modalı
+  const [editUserModal, setEditUserModal] = useState<{
+    user: AppUser;
+    displayName: string;
+    role: Role;
+  } | null>(null);
+  const [editUserSaving, setEditUserSaving] = useState(false);
+
+  // Silme Onay Modalı
+  const [deleteUserModal, setDeleteUserModal] = useState<AppUser | null>(null);
+  const [deleteUserLoading, setDeleteUserLoading] = useState(false);
+
   const [userForm, setUserForm] = useState({ displayName: "", email: "", role: "sales" as Role, password: "" });
-  const [userSuccess, setUserSuccess] = useState("");
   const [userError, setUserError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -51,36 +64,58 @@ const SettingsPage = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
 
-  const handleRoleChange = async (userId: string, userName: string, newRole: Role) => {
-    if (!currentUser) return;
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editUserModal || !currentUser) return;
+    if (!editUserModal.displayName.trim()) {
+      showToast("Lütfen personel ad soyadını giriniz.", "error");
+      return;
+    }
+    setEditUserSaving(true);
     try {
-      await updateUserRole(userId, userName, newRole, currentUser.uid, currentUser.displayName, currentUser.role);
-      setUserSuccess(`"${userName}" kullanıcısının rolü "${newRole === 'admin' ? 'Yönetici' : newRole === 'accounting' ? 'Muhasebeci' : 'Satışçı'}" olarak güncellendi.`);
-      setTimeout(() => setUserSuccess(""), 4000);
+      await updateUser(
+        editUserModal.user.uid,
+        {
+          displayName: editUserModal.displayName.trim(),
+          role: editUserModal.role
+        },
+        currentUser.uid,
+        currentUser.displayName,
+        currentUser.role
+      );
+      showToast(`"${editUserModal.displayName}" personeli başarıyla güncellendi.`, "success");
+      setEditUserModal(null);
       fetchUsers();
     } catch (err: any) {
-      setUserError("Rol güncellenirken hata: " + err.message);
-      setTimeout(() => setUserError(""), 4000);
+      showToast(err.message || "Güncelleme başarısız oldu.", "error");
+    } finally {
+      setEditUserSaving(false);
     }
   };
 
-  const handleDeleteUser = async (userId: string, userName: string) => {
-    if (!currentUser) return;
-    if (userId === currentUser.uid) {
+  const handleConfirmDeleteUser = async () => {
+    if (!deleteUserModal || !currentUser) return;
+    if (deleteUserModal.uid === currentUser.uid) {
       showToast("Kendi hesabınızı silemezsiniz!", "error");
+      setDeleteUserModal(null);
       return;
     }
-
-    if (window.confirm(`"${userName}" isimli personeli sistemden silmek istediğinize emin misiniz?`)) {
-      try {
-        await deleteUser(userId, userName, currentUser.uid, currentUser.displayName, currentUser.role);
-        setUserSuccess(`"${userName}" isimli personel sistemden silindi.`);
-        setTimeout(() => setUserSuccess(""), 4000);
-        fetchUsers();
-      } catch (err: any) {
-        setUserError("Personel silinirken hata: " + err.message);
-        setTimeout(() => setUserError(""), 4000);
-      }
+    setDeleteUserLoading(true);
+    try {
+      await deleteUser(
+        deleteUserModal.uid,
+        deleteUserModal.displayName,
+        currentUser.uid,
+        currentUser.displayName,
+        currentUser.role
+      );
+      showToast(`"${deleteUserModal.displayName}" personeli sistemden silindi.`, "success");
+      setDeleteUserModal(null);
+      fetchUsers();
+    } catch (err: any) {
+      showToast(err.message || "Silme işlemi başarısız oldu.", "error");
+    } finally {
+      setDeleteUserLoading(false);
     }
   };
 
@@ -152,10 +187,18 @@ const SettingsPage = () => {
     }
   };
 
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    displayName: string;
+    loginUsername: string;
+    email: string;
+    role: string;
+    password: string;
+  } | null>(null);
+
   const handleUserRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setUserError("");
-    setUserSuccess("");
+    setCreatedCredentials(null);
 
     if (!userForm.displayName || !userForm.email) {
       setUserError("Lütfen tüm alanları doldurun.");
@@ -164,19 +207,24 @@ const SettingsPage = () => {
 
     setIsSubmitting(true);
     try {
-      const email = userForm.email.includes("@") ? userForm.email : `${userForm.email.trim().toLowerCase()}@takip.com`;
+      const cleanInput = userForm.email.trim().toLowerCase();
+      const email = cleanInput.includes("@") ? cleanInput : `${cleanInput}@takip.com`;
+      const password = userForm.password && userForm.password.trim() ? userForm.password.trim() : "123456";
 
-      const password = userForm.password
-        ? userForm.password.trim()
-        : Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6).toUpperCase();
-
-      if (userForm.password && userForm.password.length < 6) {
+      if (userForm.password && userForm.password.trim().length < 6) {
         throw new Error("Belirttiğiniz şifre en az 6 karakter olmalıdır!");
       }
 
       await registerUser(email, password, userForm.displayName, userForm.role, currentUser);
 
-      setUserSuccess(`Kullanıcı başarıyla oluşturuldu! Kullanıcıya giriş bilgilerini güvenli şekilde iletiniz.`);
+      setCreatedCredentials({
+        displayName: userForm.displayName,
+        loginUsername: cleanInput.includes("@") ? cleanInput.split("@")[0] : cleanInput,
+        email,
+        role: userForm.role === 'admin' ? 'Yönetici' : userForm.role === 'accounting' ? 'Muhasebeci' : userForm.role === 'sysadmin' ? 'Sistem Yöneticisi' : 'Satışçı',
+        password
+      });
+
       setUserForm({ displayName: "", email: "", role: "sales", password: "" });
 
       fetchUsers();
@@ -339,21 +387,28 @@ const SettingsPage = () => {
             <span>Yeni Personel Kaydı</span>
           </h3>
 
-          {userSuccess && (
+          {createdCredentials && (
             <div style={{
               backgroundColor: "var(--success-light)",
-              border: "1px solid rgba(16, 185, 129, 0.2)",
-              color: "var(--success)",
-              padding: "0.75rem 1rem",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "0.85rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginBottom: "1rem"
+              border: "1px solid var(--success)",
+              borderRadius: "var(--radius-md)",
+              padding: "1rem",
+              marginBottom: "1.25rem",
+              color: "var(--text-primary)"
             }}>
-              <Check size={16} />
-              <span>{userSuccess}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700, color: "var(--success)", marginBottom: "0.5rem" }}>
+                <Check size={18} />
+                <span>Personel Başarıyla Oluşturuldu!</span>
+              </div>
+              <div style={{ fontSize: "0.85rem", display: "flex", flexDirection: "column", gap: "0.4rem", backgroundColor: "var(--bg-primary)", padding: "0.85rem", borderRadius: "var(--radius-sm)", border: "1px dashed var(--border-color)" }}>
+                <div><strong>Ad Soyad:</strong> {createdCredentials.displayName}</div>
+                <div><strong>Yetki Rolü:</strong> {createdCredentials.role}</div>
+                <div><strong>Giriş Kullanıcı Adı:</strong> <code style={{ color: "var(--primary)", fontWeight: 700, backgroundColor: "var(--primary-light)", padding: "2px 6px", borderRadius: "4px" }}>{createdCredentials.loginUsername}</code> (veya {createdCredentials.email})</div>
+                <div><strong>Giriş Şifresi:</strong> <code style={{ color: "var(--primary)", fontWeight: 700, backgroundColor: "var(--primary-light)", padding: "2px 6px", borderRadius: "4px" }}>{createdCredentials.password}</code></div>
+              </div>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: "0.5rem 0 0 0" }}>
+                💡 Bu giriş bilgilerini personelinize iletiniz. Personel hem telefondan hem de bilgisayardan bu bilgilerle doğrudan giriş yapabilir.
+              </p>
             </div>
           )}
 
@@ -396,6 +451,9 @@ const SettingsPage = () => {
                 placeholder="Örn: veli"
                 value={userForm.email}
                 onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
               />
             </div>
@@ -417,13 +475,16 @@ const SettingsPage = () => {
             <div className="form-group">
               <label className="form-label">Giriş Şifresi</label>
               <input
-                type="password"
+                type="text"
                 className="form-control"
-                placeholder="Boş bırakılırsa rastgele şifre atanır"
+                placeholder="Varsayılan: 123456 (Değiştirebilirsiniz)"
                 value={userForm.password}
                 onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                autoComplete="new-password"
+                autoComplete="off"
               />
+              <small style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
+                Boş bırakırsanız personelin ilk giriş şifresi otomatik olarak <strong>123456</strong> yapılır.
+              </small>
             </div>
 
             <button
@@ -446,51 +507,94 @@ const SettingsPage = () => {
               <thead>
                 <tr>
                   <th>Ad Soyad</th>
-                  <th>E-Posta</th>
+                  <th>Kullanıcı Adı</th>
                   <th>Yetki Rolü</th>
-                  <th style={{ width: "60px", textAlign: "center" }}>İşlem</th>
+                  <th style={{ width: "160px", textAlign: "center" }}>İşlem</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: "center" }}>Yükleniyor...</td>
+                    <td colSpan={4} style={{ textAlign: "center", padding: "1.5rem" }}>Yükleniyor...</td>
                   </tr>
                 ) : (
-                  users.map((u, idx) => (
-                    <tr key={idx}>
-                      <td style={{ fontWeight: 600 }}>{u.displayName}</td>
-                      <td>{u.email}</td>
-                      <td>
-                        <select
-                          className="form-control"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", width: "130px", height: "auto" }}
-                          value={u.role}
-                          onChange={(e) => handleRoleChange(u.uid, u.displayName, e.target.value as Role)}
-                          disabled={u.uid === currentUser?.uid}
-                        >
-                          <option value="sales">Satışçı</option>
-                          <option value="accounting">Muhasebeci</option>
-                          <option value="admin">Yönetici (Patron)</option>
-                          <option value="sysadmin">Sistem Yöneticisi</option>
-                        </select>
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUser(u.uid, u.displayName)}
-                          style={{
-                            color: u.uid === currentUser?.uid ? "var(--text-muted)" : "var(--danger)",
-                            cursor: u.uid === currentUser?.uid ? "not-allowed" : "pointer"
-                          }}
-                          disabled={u.uid === currentUser?.uid}
-                          title={u.uid === currentUser?.uid ? "Kendi hesabınızı silemezsiniz!" : "Kullanıcıyı Sil"}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  users.map((u, idx) => {
+                    const isSelf = u.uid === currentUser?.uid;
+                    const username = u.email ? u.email.split("@")[0] : "-";
+
+                    const getRoleBadge = (role: string) => {
+                      switch (role) {
+                        case "admin":
+                          return <span style={{ backgroundColor: "rgba(239, 68, 68, 0.12)", color: "var(--danger)", padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: 700 }}>Yönetici (Patron)</span>;
+                        case "accounting":
+                          return <span style={{ backgroundColor: "rgba(245, 158, 11, 0.12)", color: "#d97706", padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: 700 }}>Muhasebeci</span>;
+                        case "sales":
+                          return <span style={{ backgroundColor: "rgba(99, 102, 241, 0.12)", color: "var(--primary)", padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: 700 }}>Satışçı</span>;
+                        case "sysadmin":
+                          return <span style={{ backgroundColor: "rgba(16, 185, 129, 0.12)", color: "var(--success)", padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: 700 }}>Sistem Yöneticisi</span>;
+                        default:
+                          return <span style={{ backgroundColor: "rgba(100, 116, 139, 0.12)", color: "var(--text-secondary)", padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: 700 }}>{role}</span>;
+                      }
+                    };
+
+                    return (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 600 }}>{u.displayName}</td>
+                        <td>
+                          <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{username}</span>
+                        </td>
+                        <td>{getRoleBadge(u.role)}</td>
+                        <td style={{ textAlign: "center" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+                            <button
+                              type="button"
+                              onClick={() => setEditUserModal({ user: u, displayName: u.displayName, role: u.role })}
+                              style={{
+                                color: "var(--primary)",
+                                background: "rgba(99, 102, 241, 0.08)",
+                                border: "1px solid rgba(99, 102, 241, 0.2)",
+                                borderRadius: "var(--radius-sm)",
+                                padding: "0.35rem 0.6rem",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.25rem",
+                                fontSize: "0.8rem",
+                                fontWeight: 600
+                              }}
+                              title="Personeli Düzenle"
+                            >
+                              <SquarePen size={14} />
+                              <span>Düzenle</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setDeleteUserModal(u)}
+                              style={{
+                                color: isSelf ? "var(--text-muted)" : "var(--danger)",
+                                background: isSelf ? "transparent" : "rgba(239, 68, 68, 0.08)",
+                                border: isSelf ? "1px solid transparent" : "1px solid rgba(239, 68, 68, 0.2)",
+                                borderRadius: "var(--radius-sm)",
+                                padding: "0.35rem 0.6rem",
+                                cursor: isSelf ? "not-allowed" : "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.25rem",
+                                fontSize: "0.8rem",
+                                fontWeight: 600
+                              }}
+                              disabled={isSelf}
+                              title={isSelf ? "Kendi hesabınızı silemezsiniz!" : "Kullanıcıyı Sil"}
+                            >
+                              <Trash2 size={14} />
+                              <span>Sil</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -771,6 +875,195 @@ const SettingsPage = () => {
         </section>
 
       </div>
+
+      {/* --- KULLANICI DÜZENLEME MODALI --- */}
+      {editUserModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 999,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem"
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="card card-glass animate-slide-up"
+            style={{
+              width: "100%",
+              maxWidth: "460px",
+              padding: "1.75rem",
+              borderRadius: "var(--radius-lg)",
+              boxShadow: "var(--shadow-xl)"
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem", margin: 0 }}>
+                <SquarePen size={20} color="var(--primary)" />
+                <span>Personel Bilgilerini Düzenle</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditUserModal(null)}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "0.25rem" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser}>
+              <div className="form-group">
+                <label className="form-label">Personel Ad Soyad</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={editUserModal.displayName}
+                  onChange={(e) => setEditUserModal({ ...editUserModal, displayName: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Kullanıcı Adı</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={editUserModal.user.email ? editUserModal.user.email.split("@")[0] : ""}
+                  disabled
+                  style={{ backgroundColor: "var(--bg-secondary)", cursor: "not-allowed" }}
+                />
+                <small style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
+                  Kullanıcı adı güvenlik sebebiyle değiştirilemez.
+                </small>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Yetki Rolü</label>
+                <select
+                  className="form-control"
+                  value={editUserModal.role}
+                  onChange={(e) => setEditUserModal({ ...editUserModal, role: e.target.value as Role })}
+                  disabled={editUserModal.user.uid === currentUser?.uid}
+                >
+                  <option value="sales">Satış Temsilcisi (Satışçı)</option>
+                  <option value="accounting">Muhasebe Sorumlusu (Muhasebeci)</option>
+                  <option value="admin">Yönetici (Patron)</option>
+                  <option value="sysadmin">Sistem Yöneticisi</option>
+                </select>
+                {editUserModal.user.uid === currentUser?.uid && (
+                  <small style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", display: "block" }}>
+                    Kendi hesabınızın rolünü değiştiremezsiniz.
+                  </small>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setEditUserModal(null)}
+                  disabled={editUserSaving}
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={editUserSaving}
+                >
+                  {editUserSaving ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- ÖZEL KULLANICI SİLME ONAY MODALI --- */}
+      {deleteUserModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 999,
+            backgroundColor: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem"
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="card card-glass animate-slide-up"
+            style={{
+              width: "100%",
+              maxWidth: "440px",
+              padding: "1.75rem",
+              borderRadius: "var(--radius-lg)",
+              boxShadow: "var(--shadow-xl)",
+              textAlign: "center"
+            }}
+          >
+            <div
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "50%",
+                backgroundColor: "rgba(239, 68, 68, 0.12)",
+                color: "var(--danger)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 1rem auto"
+              }}
+            >
+              <AlertTriangle size={28} />
+            </div>
+
+            <h3 style={{ fontSize: "1.15rem", fontWeight: 700, marginBottom: "0.5rem" }}>
+              Personeli Silmek İstiyor musunuz?
+            </h3>
+
+            <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: "1.5", marginBottom: "1.5rem" }}>
+              <strong>"{deleteUserModal.displayName}"</strong> (<code>{deleteUserModal.email ? deleteUserModal.email.split("@")[0] : ""}</code>) isimli personeli sistemden silmek üzeresiniz. 
+              <br /><br />
+              Bu personelin sisteme erişimi derhal durdurulacaktır. Devam etmek istiyor musunuz?
+            </p>
+
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => setDeleteUserModal(null)}
+                disabled={deleteUserLoading}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ flex: 1 }}
+                onClick={handleConfirmDeleteUser}
+                disabled={deleteUserLoading}
+              >
+                {deleteUserLoading ? "Siliniyor..." : "Evet, Personeli Sil"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
