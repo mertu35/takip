@@ -1035,7 +1035,7 @@ const Sales = () => {
 
       {/* --- SATIŞ FİŞİ VE YAZDIRMA (PDF) MODALI --- */}
       {showReceiptModal && lastCreatedSale && (
-        <div className="modal-overlay" onClick={(e) => handleOverlayClick(e, setShowReceiptModal)}>
+        <div className="modal-overlay">
           <div className="modal-content animate-slide-up" style={{ maxWidth: "480px", backgroundColor: "#fff", color: "#000" }} role="dialog" aria-modal="true">
             <div className="modal-header print-hidden" style={{ borderBottom: "1px solid #eee", backgroundColor: "#f8fafc" }}>
               <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-primary)" }}>Satış Fişi / PDF Çıktısı</h3>
