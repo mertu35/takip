@@ -1185,36 +1185,6 @@ const Sales = () => {
         </div>
       )}
 
-      {/* Yazdırma Modu CSS'i */}
-      <style>{`
-        @media print {
-          html, body {
-            height: auto !important;
-            overflow: visible !important;
-            background-color: #ffffff !important;
-          }
-
-          body * {
-            visibility: hidden;
-          }
-
-          .print-area, .print-area * {
-            visibility: visible;
-          }
-
-          .print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 80mm !important;
-            margin: 0 !important;
-            padding: 10px !important;
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            box-sizing: border-box !important;
-          }
-        }
-      `}</style>
 
       {/* --- REDDEDİLEN SATIŞ DÜZENLEME MODALI --- */}
       {showEditModal && editSale && (() => {
