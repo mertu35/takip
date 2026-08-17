@@ -2,7 +2,7 @@ import React, { useState, useEffect, type ReactNode } from "react";
 import Sidebar from "./Sidebar";
 import { useAuth } from "../context/AuthContext";
 import { Menu, X, Bell } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getAnnouncements, getSales, getNotifications, markNotificationsRead } from "../services/db";
 import ProfileModal from "./ProfileModal";
 import type { Announcement, AppNotification, Sale, Role } from "../types";
@@ -23,6 +23,7 @@ const getRoleLabel = (role: Role | string) => {
 
 const Layout = ({ children }: LayoutProps) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -48,7 +49,10 @@ const Layout = ({ children }: LayoutProps) => {
           const salesData = await getSales(user.role, user.uid);
           const pending = salesData.filter((s) => s.status === "pending_accounting");
           setPendingSales(pending);
-          setPendingCount(pending.length);
+          const lastSeenStr = localStorage.getItem(`takip_seen_pending_${user.uid}`);
+          const lastSeenTimestamp = lastSeenStr ? Number(lastSeenStr) : 0;
+          const unreadPending = pending.filter((s) => new Date(s.createdAt || s.date || 0).getTime() > lastSeenTimestamp);
+          setPendingCount(unreadPending.length);
         }
       } catch (err) {
         console.error("Bildirimler yüklenirken hata:", err);
@@ -134,10 +138,17 @@ const Layout = ({ children }: LayoutProps) => {
                 onClick={async () => {
                   const opening = !showNotifications;
                   setShowNotifications(opening);
-                  if (opening && user.role === "sales" && unreadCount > 0) {
-                    await markNotificationsRead(user.uid);
-                    setUnreadCount(0);
-                    setUserNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                  if (opening) {
+                    if (user.role === "sales") {
+                      if (unreadCount > 0) {
+                        await markNotificationsRead(user.uid);
+                        setUnreadCount(0);
+                        setUserNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                      }
+                    } else {
+                      localStorage.setItem(`takip_seen_pending_${user.uid}`, Date.now().toString());
+                      setPendingCount(0);
+                    }
                   }
                 }}
                 aria-label="Bildirimler"
@@ -189,7 +200,7 @@ const Layout = ({ children }: LayoutProps) => {
                       right: 0,
                       top: "100%",
                       marginTop: "0.5rem",
-                      width: "300px",
+                      width: "320px",
                       zIndex: 200,
                       padding: "1rem",
                       display: "flex",
@@ -198,9 +209,16 @@ const Layout = ({ children }: LayoutProps) => {
                       boxShadow: "var(--shadow-lg)"
                     }}
                   >
-                    <h4 style={{ fontSize: "0.9rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                      {user.role === "sales" ? "Bildirimlerim" : "Bekleyen Sipariş Onayları"}
-                    </h4>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
+                      <h4 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0 }}>
+                        {user.role === "sales" ? "Bildirimlerim" : "Bekleyen Sipariş Onayları"}
+                      </h4>
+                      {user.role !== "sales" && pendingSales.length > 0 && (
+                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                          {pendingSales.length} Sipariş
+                        </span>
+                      )}
+                    </div>
                     <div style={{ maxHeight: "240px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                       {user.role === "sales" ? (
                         userNotifications.length === 0 ? (
@@ -236,13 +254,27 @@ const Layout = ({ children }: LayoutProps) => {
                           ))
                         )
                       ) : (
-                        pendingCount === 0 ? (
+                        pendingSales.length === 0 ? (
                           <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center", padding: "1rem 0" }}>
                             Yeni onay bekleyen sipariş yok.
                           </p>
                         ) : (
                           pendingSales.map((s, idx) => (
-                            <div key={idx} style={{ fontSize: "0.8rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
+                            <div
+                              key={idx}
+                              style={{
+                                fontSize: "0.8rem",
+                                borderBottom: "1px solid var(--border-color)",
+                                paddingBottom: "0.5rem",
+                                cursor: (user.role === "admin" || user.role === "accounting") ? "pointer" : "default"
+                              }}
+                              onClick={() => {
+                                if (user.role === "admin" || user.role === "accounting") {
+                                  setShowNotifications(false);
+                                  navigate("/accounting");
+                                }
+                              }}
+                            >
                               <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{s.receiptNo}</div>
                               <div style={{ color: "var(--text-secondary)", marginTop: "0.15rem" }}>{s.customerCompany}</div>
                               <div style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: 600, marginTop: "0.15rem" }}>
@@ -253,6 +285,18 @@ const Layout = ({ children }: LayoutProps) => {
                         )
                       )}
                     </div>
+                    {user.role !== "sales" && pendingSales.length > 0 && (user.role === "admin" || user.role === "accounting") && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ width: "100%", fontSize: "0.8rem", marginTop: "0.25rem" }}
+                        onClick={() => {
+                          setShowNotifications(false);
+                          navigate("/accounting");
+                        }}
+                      >
+                        Muhasebe Onay Ekranına Git →
+                      </button>
+                    )}
                   </div>
                 </>
               )}
