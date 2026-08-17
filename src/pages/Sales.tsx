@@ -494,7 +494,7 @@ const Sales = () => {
   if (!user) return null;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem" }} className="grid-cols-2 animate-fade">
+    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem" }} className="grid-cols-2 animate-fade print-hidden">
 
       {showScanner && (
         <BarcodeScanner
