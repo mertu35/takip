@@ -60,6 +60,12 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
 
+    // --- PAYMENTS KOLEKSİYONU (Tahsilatlar) ---
+    match /payments/{paymentId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (isAdminOrSysadmin() || getUserRole() == 'accounting');
+    }
+
     // --- APPROVALS KOLEKSİYONU ---
     match /approvals/{approvalId} {
       allow read, write: if isSignedIn();

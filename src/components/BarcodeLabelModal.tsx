@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { X, Printer, Tag, Check, Copy } from "lucide-react";
+import { X, Printer, Tag } from "lucide-react";
 import type { Product, CompanyProfile } from "../types";
 
 interface BarcodeLabelModalProps {
@@ -74,13 +74,13 @@ const BarcodeCanvas = ({ code, width = 200, height = 55 }: { code: string; width
 };
 
 const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({ product, companyProfile, onClose }) => {
-  if (!product) return null;
-
   const [quantity, setQuantity] = useState<number>(1);
   const [includePrice, setIncludePrice] = useState<boolean>(true);
   const [includeCompany, setIncludeCompany] = useState<boolean>(true);
   const [labelSize, setLabelSize] = useState<"thermal_50x30" | "thermal_60x40" | "a4_grid">("thermal_50x30");
   const [printing, setPrinting] = useState<boolean>(false);
+
+  if (!product) return null;
 
   const barcodeValue = product.barcode || product.code || "8690000000000";
   const companyName = companyProfile?.companyName || "Özkon Yapı";

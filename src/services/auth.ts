@@ -259,12 +259,18 @@ export const updateUser = async (
       throw new Error("Kullanıcı bulunamadı!");
     }
   }
+  const roleLabelMap: Record<string, string> = {
+    admin: "Yönetici (Patron)",
+    sysadmin: "Sistem Yöneticisi",
+    accounting: "Muhasebeci",
+    sales: "Satış Temsilcisi"
+  };
   await addLog(
     currentUserId,
     currentUserName,
     currentUserRole,
     "UPDATE_USER",
-    `"${updatedFields.displayName}" isimli personelin bilgileri (Rol: ${updatedFields.role}) güncellendi.`
+    `"${updatedFields.displayName}" isimli personelin bilgileri (Rol: ${roleLabelMap[updatedFields.role] || updatedFields.role}) güncellendi.`
   );
 };
 
@@ -295,12 +301,18 @@ export const updateUserRole = async (
       throw new Error("Kullanıcı bulunamadı!");
     }
   }
+  const roleLabelMap: Record<string, string> = {
+    admin: "Yönetici (Patron)",
+    sysadmin: "Sistem Yöneticisi",
+    accounting: "Muhasebeci",
+    sales: "Satış Temsilcisi"
+  };
   await addLog(
     currentUserId,
     currentUserName,
     currentUserRole,
     "UPDATE_USER_ROLE",
-    `"${userName}" kullanıcısının rolü "${newRole}" olarak güncellendi.`
+    `"${userName}" kullanıcısının yetkisi "${roleLabelMap[newRole] || newRole}" olarak güncellendi.`
   );
 };
 

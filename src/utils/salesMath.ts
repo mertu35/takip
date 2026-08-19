@@ -12,7 +12,7 @@
 // kullanıldığından, aynı satış farklı ekranlarda farklı KDV/net tutar
 // gösterebiliyordu. Artık tüm çağıranlar bu dosyadaki tek fonksiyonu kullanır.
 
-import type { SaleItem } from "../types";
+import type { SaleItem, PaymentMethod } from "../types";
 
 export interface SaleTotals {
   totalAmount: number;
@@ -81,7 +81,20 @@ export function computeStockDeltas(
   return deltas;
 }
 
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  open_account: "Açık Hesap (Cari)",
+  cash: "Nakit",
+  credit_card: "Kredi Kartı / POS",
+  bank_transfer: "Banka Havalesi / EFT",
+  check: "Çek / Senet"
+};
+
 /** Fiş numarası oluşturur: TS-YYYY-NNNNN */
 export function formatReceiptNo(year: number, sequence: number): string {
   return `TS-${year}-${String(sequence).padStart(5, "0")}`;
+}
+
+/** Tahsilat makbuzu numarası oluşturur: THS-YYYY-NNNNN */
+export function formatPaymentReceiptNo(year: number, sequence: number): string {
+  return `THS-${year}-${String(sequence).padStart(5, "0")}`;
 }

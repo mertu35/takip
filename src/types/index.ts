@@ -47,6 +47,8 @@ export interface Customer {
   taxOffice?: string;
   taxNumber?: string;
   address?: string;
+  defaultDiscountRate?: number;
+  currentBalance?: number; // Pozitif = Müşterinin Borcu (TL), Negatif = Alacaklı/Fazla Ödeme
   createdAt?: string;
 }
 
@@ -64,6 +66,10 @@ export interface SaleItem {
 
 export type SaleStatus = "pending_accounting" | "approved" | "rejected";
 
+export type PaymentMethod = "open_account" | "cash" | "credit_card" | "bank_transfer" | "check";
+
+export type CheckStatus = "portfolio" | "collected" | "bounced";
+
 export interface Sale {
   id: string;
   salespersonId: string;
@@ -73,6 +79,10 @@ export interface Sale {
   customerCompany: string;
   date: string;
   status: SaleStatus;
+  paymentMethod?: PaymentMethod;
+  paymentDueDate?: string;
+  checkNumber?: string;
+  checkStatus?: CheckStatus;
   totalAmount: number;
   taxAmount: number;
   discountAmount: number;
@@ -85,6 +95,26 @@ export interface Sale {
   items: SaleItem[];
   resubmittedAt?: string | null;
   resubmittedBy?: string | null;
+  createdAt?: string;
+}
+
+export interface Payment {
+  id: string;
+  receiptNo: string; // Örn: THS-2026-0001
+  customerId: string;
+  customerName: string;
+  customerCompany: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  date: string;
+  notes?: string;
+  checkNumber?: string;
+  dueDate?: string;
+  saleId?: string;
+  checkStatus?: CheckStatus;
+  createdById: string;
+  createdByName: string;
+  createdByRole: Role | string;
   createdAt?: string;
 }
 

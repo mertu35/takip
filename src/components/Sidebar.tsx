@@ -17,6 +17,7 @@ import {
   ChevronRight,
   User,
   Users,
+  TrendingUp,
   type LucideIcon
 } from "lucide-react";
 import type { Role } from "../types";
@@ -56,12 +57,16 @@ const Sidebar = ({ onOpenProfile }: SidebarProps) => {
   if (user.role === "admin") {
     menuItems.push(
       { path: "/", label: "Dashboard", icon: LayoutDashboard },
+      { path: "/reports", label: "Patron Raporları", icon: TrendingUp },
+      { path: "/customers", label: "Müşteriler & Cari", icon: Users },
+      { path: "/inventory", label: "Ürün & Stok", icon: Package },
       { path: "/accounting", label: "Satış Geçmişi", icon: CheckSquare },
       { path: "/logs", label: "İşlem Logları", icon: History }
     );
   } else if (user.role === "sysadmin") {
     menuItems.push(
       { path: "/settings", label: "Sistem Ayarları", icon: Settings },
+      { path: "/reports", label: "Yönetici Raporları", icon: TrendingUp },
       { path: "/logs", label: "İşlem Logları", icon: History }
     );
   } else if (user.role === "sales") {

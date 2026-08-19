@@ -4,36 +4,77 @@ import { getLogs } from "../services/db";
 import { History, Search } from "lucide-react";
 import type { LogEntry } from "../types";
 
+const ACTION_LABELS: Record<string, { label: string; badge: string }> = {
+  CREATE_SALE: { label: "Satış Yapıldı", badge: "badge-primary" },
+  APPROVE_SALE: { label: "Satış Onaylandı", badge: "badge-success" },
+  REJECT_SALE: { label: "Satış Reddedildi", badge: "badge-danger" },
+  UPDATE_SALE: { label: "Satış Düzenlendi", badge: "badge-warning" },
+  RESUBMIT_SALE: { label: "Satış Yeniden Gönderildi", badge: "badge-info" },
+  ADD_PRODUCT: { label: "Ürün Eklendi", badge: "badge-info" },
+  UPDATE_PRODUCT: { label: "Ürün Güncellendi", badge: "badge-warning" },
+  DELETE_PRODUCT: { label: "Ürün Silindi", badge: "badge-danger" },
+  ADD_CUSTOMER: { label: "Müşteri Eklendi", badge: "badge-info" },
+  UPDATE_CUSTOMER: { label: "Müşteri Güncellendi", badge: "badge-warning" },
+  DELETE_CUSTOMER: { label: "Müşteri Silindi", badge: "badge-danger" },
+  ADD_PAYMENT: { label: "Tahsilat Alındı", badge: "badge-success" },
+  DELETE_PAYMENT: { label: "Tahsilat Silindi", badge: "badge-danger" },
+  ADD_CATEGORY: { label: "Kategori Eklendi", badge: "badge-info" },
+  DELETE_CATEGORY: { label: "Kategori Silindi", badge: "badge-danger" },
+  ADD_ANNOUNCEMENT: { label: "Duyuru Eklendi", badge: "badge-info" },
+  DELETE_ANNOUNCEMENT: { label: "Duyuru Silindi", badge: "badge-danger" },
+  UPDATE_COMPANY_PROFILE: { label: "Şirket Profili Güncellendi", badge: "badge-primary" },
+  CREATE_USER: { label: "Kullanıcı Eklendi", badge: "badge-info" },
+  UPDATE_USER: { label: "Kullanıcı Güncellendi", badge: "badge-warning" },
+  UPDATE_USER_ROLE: { label: "Yetki Değiştirildi", badge: "badge-warning" },
+  DELETE_USER: { label: "Kullanıcı Silindi", badge: "badge-danger" }
+};
+
 const getActionBadge = (action: string) => {
-  switch (action) {
-    case "CREATE_SALE":
-      return <span className="badge badge-primary">Satış Yapıldı</span>;
-    case "APPROVE_SALE":
-      return <span className="badge badge-success">Satış Onaylandı</span>;
-    case "REJECT_SALE":
-      return <span className="badge badge-danger">Satış Reddedildi</span>;
-    case "ADD_PRODUCT":
-      return <span className="badge badge-info">Ürün Eklendi</span>;
-    case "UPDATE_PRODUCT":
-      return <span className="badge badge-warning">Ürün Güncellendi</span>;
-    case "DELETE_PRODUCT":
-      return <span className="badge badge-danger">Ürün Silindi</span>;
-    case "ADD_CUSTOMER":
-      return <span className="badge badge-info">Müşteri Eklendi</span>;
-    case "ADD_CATEGORY":
-      return <span className="badge badge-info">Kategori Eklendi</span>;
-    default:
-      return <span className="badge badge-secondary">{action}</span>;
+  const item = ACTION_LABELS[action];
+  if (item) {
+    return <span className={`badge ${item.badge}`}>{item.label}</span>;
   }
+  // Dinamik / bilinmeyen aksiyonlar için şık rozet
+  const fallbackLabel = action
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
+  return <span className="badge badge-secondary">{fallbackLabel}</span>;
+};
+
+const getActionLabel = (action: string) => {
+  return ACTION_LABELS[action]?.label || action.replace(/_/g, " ");
 };
 
 const getRoleLabel = (role: string) => {
   switch (role) {
-    case "admin": return "Yönetici";
+    case "admin": return "Yönetici (Patron)";
+    case "sysadmin": return "Sistem Yöneticisi";
     case "accounting": return "Muhasebeci";
-    case "sales": return "Satışçı";
+    case "sales": return "Satış Temsilcisi";
     default: return role;
   }
+};
+
+const formatLogDetail = (details?: string) => {
+  if (!details) return "—";
+  let cleaned = details;
+
+  // 1. Eski loglardaki anlamsız Firestore ID kalıntılarını temizle (Örn: PsUsOCVxS5uu1gcuhZJm ID'li satış -> Satış)
+  cleaned = cleaned.replace(/([a-zA-Z0-9_-]{16,32})\s+ID'li\s+satış/g, "Satış");
+
+  // 2. Eski loglardaki İngilizce rol isimlerini Türkçeleştir
+  cleaned = cleaned
+    .replace(/rolü\s+"admin"/gi, 'yetkisi "Yönetici (Patron)"')
+    .replace(/rolü\s+"sysadmin"/gi, 'yetkisi "Sistem Yöneticisi"')
+    .replace(/rolü\s+"accounting"/gi, 'yetkisi "Muhasebeci"')
+    .replace(/rolü\s+"sales"/gi, 'yetkisi "Satış Temsilcisi"')
+    .replace(/Rol:\s*admin/gi, "Rol: Yönetici (Patron)")
+    .replace(/Rol:\s*sysadmin/gi, "Rol: Sistem Yöneticisi")
+    .replace(/Rol:\s*accounting/gi, "Rol: Muhasebeci")
+    .replace(/Rol:\s*sales/gi, "Rol: Satış Temsilcisi");
+
+  return cleaned;
 };
 
 const Logs = () => {
@@ -61,8 +102,27 @@ const Logs = () => {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh", color: "var(--text-secondary)" }}>
-        Yükleniyor...
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
+        <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <div className="skeleton" style={{ width: "220px", height: "24px" }} />
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "1rem" }}>
+            <div className="skeleton" style={{ height: "38px" }} />
+            <div className="skeleton" style={{ height: "38px" }} />
+            <div className="skeleton" style={{ height: "38px" }} />
+          </div>
+        </section>
+        <section className="card" style={{ padding: "1.5rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "140px 180px 140px 1fr", gap: "1rem", alignItems: "center", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-color)" }}>
+                <div className="skeleton" style={{ height: "18px" }} />
+                <div className="skeleton" style={{ height: "18px" }} />
+                <div className="skeleton" style={{ height: "18px" }} />
+                <div className="skeleton" style={{ height: "18px" }} />
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     );
   }
@@ -111,7 +171,7 @@ const Logs = () => {
           >
             <option value="all">Tüm İşlem Tipleri</option>
             {actionTypes.map(t => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>{getActionLabel(t)}</option>
             ))}
           </select>
 
@@ -122,6 +182,7 @@ const Logs = () => {
           >
             <option value="all">Tüm Rol Yetkileri</option>
             <option value="admin">Yönetici (Patron)</option>
+            <option value="sysadmin">Sistem Yöneticisi</option>
             <option value="accounting">Muhasebeci</option>
             <option value="sales">Satış Temsilcisi</option>
           </select>
@@ -158,13 +219,13 @@ const Logs = () => {
                       <span style={{
                         fontSize: "0.8rem",
                         fontWeight: 600,
-                        color: log.userRole === "admin" ? "var(--danger)" : log.userRole === "accounting" ? "var(--success)" : "var(--primary)"
+                        color: log.userRole === "admin" ? "var(--danger)" : log.userRole === "sysadmin" ? "#6366f1" : log.userRole === "accounting" ? "var(--success)" : "var(--primary)"
                       }}>
                         {getRoleLabel(log.userRole as string)}
                       </span>
                     </td>
                     <td>{getActionBadge(log.action)}</td>
-                    <td style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{log.details}</td>
+                    <td style={{ fontSize: "0.9rem", color: "var(--text-primary)" }}>{formatLogDetail(log.details)}</td>
                   </tr>
                 ))
               )}

@@ -6,6 +6,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { ToastProvider } from "./context/ToastContext";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Login from "./pages/Login";
 
 // Sayfa bazlı code-splitting: Login dışındaki tüm sayfalar ilk yüklemede
@@ -19,6 +20,7 @@ const Accounting = lazy(() => import("./pages/Accounting"));
 const Inventory = lazy(() => import("./pages/Inventory"));
 const Logs = lazy(() => import("./pages/Logs"));
 const Settings = lazy(() => import("./pages/Settings"));
+const ExecutiveReports = lazy(() => import("./pages/ExecutiveReports"));
 
 const RouteFallback = () => (
   <div
@@ -61,90 +63,103 @@ function App() {
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>
-            <Suspense fallback={<RouteFallback />}>
-              <Routes>
-                <Route path="/login" element={<Login />} />
+            <ErrorBoundary>
+              <Suspense fallback={<RouteFallback />}>
+                <Routes>
+                  <Route path="/login" element={<Login />} />
 
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <HomeRedirect />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <HomeRedirect />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/sales"
-                  element={
-                    <ProtectedRoute allowedRoles={["sales"]}>
-                      <Layout>
-                        <Sales />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/sales"
+                    element={
+                      <ProtectedRoute allowedRoles={["sales"]}>
+                        <Layout>
+                          <Sales />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/customers"
-                  element={
-                    <ProtectedRoute allowedRoles={["sales", "admin"]}>
-                      <Layout>
-                        <Customers />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/customers"
+                    element={
+                      <ProtectedRoute allowedRoles={["sales", "admin"]}>
+                        <Layout>
+                          <Customers />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/accounting"
-                  element={
-                    <ProtectedRoute allowedRoles={["admin", "accounting"]}>
-                      <Layout>
-                        <Accounting />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/accounting"
+                    element={
+                      <ProtectedRoute allowedRoles={["admin", "accounting"]}>
+                        <Layout>
+                          <Accounting />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/inventory"
-                  element={
-                    <ProtectedRoute allowedRoles={["admin", "sales", "accounting"]}>
-                      <Layout>
-                        <Inventory />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/inventory"
+                    element={
+                      <ProtectedRoute allowedRoles={["admin", "sales", "accounting"]}>
+                        <Layout>
+                          <Inventory />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/logs"
-                  element={
-                    <ProtectedRoute allowedRoles={["admin", "sysadmin"]}>
-                      <Layout>
-                        <Logs />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/logs"
+                    element={
+                      <ProtectedRoute allowedRoles={["admin", "sysadmin"]}>
+                        <Layout>
+                          <Logs />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route
-                  path="/settings"
-                  element={
-                    <ProtectedRoute allowedRoles={["sysadmin"]}>
-                      <Layout>
-                        <Settings />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
+                  <Route
+                    path="/settings"
+                    element={
+                      <ProtectedRoute allowedRoles={["sysadmin"]}>
+                        <Layout>
+                          <Settings />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
 
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
+                  <Route
+                    path="/reports"
+                    element={
+                      <ProtectedRoute allowedRoles={["admin", "sysadmin"]}>
+                        <Layout>
+                          <ExecutiveReports />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
           </BrowserRouter>
         </AuthProvider>
       </ToastProvider>

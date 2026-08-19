@@ -1,14 +1,16 @@
-// Takip Sistemi - Satışçı Modülü (Sales)
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getCustomers, getProducts, addSale, addCustomer, getSales, resubmitSale, getCompanyProfile } from "../services/db";
 import { generateInvoicePDF } from "../utils/generateInvoicePDF";
-import { computeSaleTotals } from "../utils/salesMath";
+import { computeSaleTotals, PAYMENT_METHOD_LABELS } from "../utils/salesMath";
+import { formatCurrency, formatDate } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import BarcodeScanner from "../components/BarcodeScanner";
-import type { Customer, Product, Sale, SaleItem, CompanyProfile } from "../types";
+import EmptyState from "../components/EmptyState";
+import type { Customer, Product, Sale, SaleItem, CompanyProfile, PaymentMethod } from "../types";
 import {
   Plus,
+  Minus,
   Trash2,
   Search,
   UserPlus,
@@ -18,7 +20,13 @@ import {
   ScanLine,
   RefreshCw,
   Edit3,
-  Download
+  Download,
+  RotateCcw,
+  CreditCard,
+  ShoppingCart,
+  Zap,
+  Keyboard,
+  PlusCircle
 } from "lucide-react";
 
 // Çevrimdışı ve Güvenli HTML5 Canvas Tabanlı Code 39 Barkod Bileşeni
@@ -126,6 +134,9 @@ const Sales = () => {
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [notes, setNotes] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("open_account");
+  const [checkNumber, setCheckNumber] = useState("");
+  const [paymentDueDate, setPaymentDueDate] = useState("");
 
   // Yeni Müşteri Modal States
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -138,11 +149,29 @@ const Sales = () => {
   const [lastCreatedSale, setLastCreatedSale] = useState<Sale | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
-  // Ürün Ekleme Form States
+  // Ürün Ekleme Form States & Refs
   const [selectedProductId, setSelectedProductId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [prodSearch, setProdSearch] = useState("");
   const [showScanner, setShowScanner] = useState(false);
+
+  // Hızlı Satış Rafı & Kısayol States & Refs
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showShelfAddModal, setShowShelfAddModal] = useState(false);
+  const [shelfSearch, setShelfSearch] = useState("");
+  const [shelfProductIds, setShelfProductIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`takip_pos_shelf_${user?.uid || "default"}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const prodSearchInputRef = useRef<HTMLInputElement>(null);
+  const customerSelectRef = useRef<HTMLSelectElement>(null);
+  const discountInputRef = useRef<HTMLInputElement>(null);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   // Reddedilen Satış Düzenleme Modal States
   const [showEditModal, setShowEditModal] = useState(false);
@@ -155,24 +184,80 @@ const Sales = () => {
   const [editQuantity, setEditQuantity] = useState(1);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
+  // Global Klavye Kısayolları (F1, F2, F4, F8, F9, Ctrl+Enter, Esc)
   useEffect(() => {
-    if (!showCustomerModal && !showReceiptModal) return;
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // F1 -> Kısayol Yardım Modalı
+      if (e.key === "F1") {
+        e.preventDefault();
+        setShowShortcutsModal(prev => !prev);
+        return;
+      }
 
-    const handleKeyDown = (e: KeyboardEvent) => {
+      // F2 -> Ürün / Barkod Arama Alanına Odaklan
+      if (e.key === "F2") {
+        e.preventDefault();
+        prodSearchInputRef.current?.focus();
+        prodSearchInputRef.current?.select();
+        return;
+      }
+
+      // F4 -> Müşteri Seçimine Odaklan
+      if (e.key === "F4") {
+        e.preventDefault();
+        customerSelectRef.current?.focus();
+        return;
+      }
+
+      // F8 -> İskonto / İndirim Alanına Odaklan
+      if (e.key === "F8") {
+        e.preventDefault();
+        discountInputRef.current?.focus();
+        discountInputRef.current?.select();
+        return;
+      }
+
+      // F9 veya Ctrl + Enter -> Satışı Onaya Gönder
+      if (e.key === "F9" || (e.ctrlKey && e.key === "Enter")) {
+        e.preventDefault();
+        submitButtonRef.current?.click();
+        return;
+      }
+
+      // Escape -> Modalları Kapat veya Aramayı Temizle
       if (e.key === "Escape") {
-        setShowCustomerModal(false);
-        setShowReceiptModal(false);
+        if (showShelfAddModal) {
+          setShowShelfAddModal(false);
+        } else if (showShortcutsModal) {
+          setShowShortcutsModal(false);
+        } else if (showCustomerModal) {
+          setShowCustomerModal(false);
+        } else if (showReceiptModal) {
+          setShowReceiptModal(false);
+        } else if (showEditModal) {
+          setShowEditModal(false);
+        } else if (prodSearch) {
+          setProdSearch("");
+          setSelectedProductId("");
+        }
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [showShortcutsModal, showShelfAddModal, showCustomerModal, showReceiptModal, showEditModal, prodSearch]);
 
+  // Modal Açıkken Scroll Kilitleme
+  useEffect(() => {
+    if (showCustomerModal || showReceiptModal || showEditModal || showShortcutsModal || showShelfAddModal) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "unset";
     };
-  }, [showCustomerModal, showReceiptModal]);
+  }, [showCustomerModal, showReceiptModal, showEditModal, showShortcutsModal, showShelfAddModal]);
 
   const handleOverlayClick = (_e: React.MouseEvent, _closeFn: (v: boolean) => void) => {
     // Form doldurulurken dış boşluğa kazara tıklanması durumunda modalın kapanması engellendi
@@ -223,14 +308,130 @@ const Sales = () => {
     }
   }, [user?.role, user?.uid]);
 
+  const handleRepeatSale = useCallback((sale: Sale) => {
+    setSelectedCustomerId(sale.customerId);
+    const validItems: SaleItem[] = [];
+    let missingCount = 0;
+
+    for (const item of sale.items || []) {
+      const currentProd = products.find(p => p.id === item.productId);
+      if (currentProd) {
+        validItems.push({
+          ...item,
+          price: currentProd.price,
+          taxRate: currentProd.taxRate ?? item.taxRate,
+          total: currentProd.price * item.quantity
+        });
+      } else {
+        missingCount++;
+      }
+    }
+
+    setCart(validItems);
+    setDiscountAmount(sale.discountAmount || 0);
+    setNotes(sale.notes || "");
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    if (missingCount > 0) {
+      showToast(`Sipariş sepete aktarıldı (${missingCount} ürün stokta bulunmadığı için atlandı).`, "warning");
+    } else {
+      showToast(`"${sale.receiptNo}" numaralı satış sepetinize aktarıldı.`, "success");
+    }
+  }, [products, showToast]);
+
+  const handleCustomerChange = useCallback((customerId: string) => {
+    setSelectedCustomerId(customerId);
+    const cust = customers.find(c => c.id === customerId);
+    if (cust?.defaultDiscountRate && cust.defaultDiscountRate > 0) {
+      const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
+      const calcDiscount = subtotal > 0 ? (subtotal * cust.defaultDiscountRate) / 100 : 0;
+      setDiscountAmount(Number(calcDiscount.toFixed(2)));
+      showToast(`"${cust.company || cust.name}" için tanımlı %${cust.defaultDiscountRate} sabit iskonto uygulandı.`, "info");
+    }
+  }, [customers, cart, showToast]);
+
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
 
+  useEffect(() => {
+    if (products.length === 0 || customers.length === 0) return;
+    const templateStr = sessionStorage.getItem("repeat_sale_template");
+    if (templateStr) {
+      try {
+        const sale = JSON.parse(templateStr) as Sale;
+        sessionStorage.removeItem("repeat_sale_template");
+        handleRepeatSale(sale);
+      } catch {
+        sessionStorage.removeItem("repeat_sale_template");
+      }
+    }
+
+    const preselectedCustId = sessionStorage.getItem("preselected_customer_id");
+    if (preselectedCustId) {
+      sessionStorage.removeItem("preselected_customer_id");
+      handleCustomerChange(preselectedCustId);
+    }
+  }, [products, customers, handleRepeatSale, handleCustomerChange]);
+
+  // Hızlı Satış Rafına Ürün Ekle
+  const handleAddProductToShelf = (productId: string) => {
+    if (shelfProductIds.includes(productId)) return;
+    const updated = [...shelfProductIds, productId];
+    setShelfProductIds(updated);
+    try {
+      localStorage.setItem(`takip_pos_shelf_${user?.uid || "default"}`, JSON.stringify(updated));
+    } catch (e) {
+      console.error("Raf verisi kaydedilemedi:", e);
+    }
+    const prod = products.find(p => p.id === productId);
+    showToast(`"${prod?.name || 'Ürün'}" hızlı satış rafına eklendi.`, "success");
+  };
+
+  // Hızlı Satış Rafından Ürün Kaldır (-)
+  const handleRemoveProductFromShelf = (productId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const updated = shelfProductIds.filter(id => id !== productId);
+    setShelfProductIds(updated);
+    try {
+      localStorage.setItem(`takip_pos_shelf_${user?.uid || "default"}`, JSON.stringify(updated));
+    } catch (e) {
+      console.error("Raf verisi kaydedilemedi:", e);
+    }
+    const prod = products.find(p => p.id === productId);
+    showToast(`"${prod?.name || 'Ürün'}" hızlı satış rafından kaldırıldı.`, "info");
+  };
+
+  // Hızlı Satış Rafındaki Ürünler (Başlangıçta tamamen boştur, kullanıcı ekledikçe dolar)
+  const shelfProducts = useMemo(() => {
+    return products.filter((p) => shelfProductIds.includes(p.id));
+  }, [products, shelfProductIds]);
+
   if (loading) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh", color: "var(--text-secondary)" }}>
-        Yükleniyor...
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem" }} className="grid-cols-2 animate-fade">
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem", minHeight: "130px" }}>
+            <div className="skeleton" style={{ width: "160px", height: "20px" }} />
+            <div className="skeleton" style={{ width: "100%", height: "42px", borderRadius: "6px" }} />
+          </div>
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem", minHeight: "280px" }}>
+            <div className="skeleton" style={{ width: "200px", height: "20px" }} />
+            <div className="skeleton" style={{ width: "100%", height: "180px", borderRadius: "8px" }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem", minHeight: "220px" }}>
+            <div className="skeleton" style={{ width: "140px", height: "20px" }} />
+            <div className="skeleton" style={{ width: "100%", height: "42px", borderRadius: "6px" }} />
+            <div className="skeleton" style={{ width: "100%", height: "42px", borderRadius: "6px" }} />
+          </div>
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem", minHeight: "180px" }}>
+            <div className="skeleton" style={{ width: "100%", height: "40px" }} />
+            <div className="skeleton" style={{ width: "100%", height: "50px", borderRadius: "8px" }} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -281,6 +482,78 @@ const Sales = () => {
     setSelectedProductId("");
     setQuantity(1);
     setProdSearch("");
+  };
+
+  // Hızlı Ürün Butonuna Tıklandığında Sepete Ekle (+1)
+  const handleQuickAddProduct = (prod: Product) => {
+    if (prod.stock <= 0) {
+      showToast(`"${prod.name}" ürününün stoğu tükenmiştir!`, "warning");
+      return;
+    }
+
+    const existingIndex = cart.findIndex(item => item.productId === prod.id);
+    const currentCartQty = existingIndex !== -1 ? cart[existingIndex].quantity : 0;
+
+    if (currentCartQty + 1 > prod.stock) {
+      showToast(`Stokta sadece ${prod.stock} adet var. Sepetinizde zaten ${currentCartQty} adet bulunuyor.`, "warning");
+      return;
+    }
+
+    if (existingIndex !== -1) {
+      const updatedCart = [...cart];
+      updatedCart[existingIndex].quantity += 1;
+      updatedCart[existingIndex].total = updatedCart[existingIndex].quantity * prod.price;
+      setCart(updatedCart);
+    } else {
+      setCart([
+        ...cart,
+        {
+          productId: prod.id,
+          productName: prod.name,
+          productCode: prod.code,
+          quantity: 1,
+          price: prod.price,
+          costPrice: (prod as any).costPrice ?? 0,
+          taxRate: (prod as any).taxRate ?? 20,
+          total: prod.price
+        }
+      ]);
+    }
+
+    showToast(`+1 "${prod.name}" sepete eklendi.`, "success");
+  };
+
+  // Sepeti Temizleme
+  const handleClearCart = () => {
+    if (cart.length === 0) return;
+    if (window.confirm("Sepetteki tüm ürünleri boşaltmak istediğinize emin misiniz?")) {
+      setCart([]);
+      setDiscountAmount(0);
+      showToast("Sepet temizlendi.", "info");
+    }
+  };
+
+  const handleUpdateQuantity = (idx: number, delta: number) => {
+    const item = cart[idx];
+    if (!item) return;
+    const prod = products.find(p => p.id === item.productId);
+    const maxStock = prod ? prod.stock : 999999;
+    const newQty = item.quantity + delta;
+
+    if (newQty <= 0) {
+      handleRemoveFromSepet(idx);
+      return;
+    }
+
+    if (newQty > maxStock) {
+      showToast(`Stokta sadece ${maxStock} adet var.`, "warning");
+      return;
+    }
+
+    const updatedCart = [...cart];
+    updatedCart[idx].quantity = newQty;
+    updatedCart[idx].total = newQty * item.price;
+    setCart(updatedCart);
   };
 
   const handleRemoveFromSepet = (idx: number) => {
@@ -412,6 +685,9 @@ const Sales = () => {
       customerCompany: customer.company,
       items: cart,
       notes,
+      paymentMethod,
+      paymentDueDate: paymentMethod === "check" ? paymentDueDate : undefined,
+      checkNumber: paymentMethod === "check" ? checkNumber : undefined,
       discountAmount: discount
     };
 
@@ -424,6 +700,9 @@ const Sales = () => {
       setCart([]);
       setNotes("");
       setDiscountAmount(0);
+      setPaymentMethod("open_account");
+      setCheckNumber("");
+      setPaymentDueDate("");
 
       fetchInitialData();
       showToast("Satış kaydı başarıyla oluşturuldu.", "success");
@@ -590,58 +869,144 @@ const Sales = () => {
     }, 250);
   };
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(prodSearch.toLowerCase()) ||
-    p.code.toLowerCase().includes(prodSearch.toLowerCase()) ||
-    ((p as any).barcode && (p as any).barcode.toLowerCase().includes(prodSearch.toLowerCase()))
-  );
+  const filteredProducts = products.filter(p => {
+    const search = (prodSearch || "").toLowerCase();
+    const nameMatch = (p.name || "").toLowerCase().includes(search);
+    const codeMatch = (p.code || "").toLowerCase().includes(search);
+    const barcodeMatch = (p as any).barcode ? String((p as any).barcode).toLowerCase().includes(search) : false;
+    return nameMatch || codeMatch || barcodeMatch;
+  });
 
   if (!user) return null;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem" }} className="grid-cols-2 animate-fade print-hidden">
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }} className="animate-fade print-hidden">
 
-      {showScanner && (
-        <BarcodeScanner
-          onDetected={handleBarcodeDetected}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
+      {/* --- HIZLI POS KLAVYE KISAYOLLARI BİLGİ ŞERİDİ --- */}
+      <div
+        className="card"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "0.6rem 1rem",
+          backgroundColor: "var(--bg-secondary)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "var(--radius-md)",
+          flexWrap: "wrap",
+          gap: "0.5rem"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.8rem", fontWeight: 800, color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: "0.3rem", marginRight: "0.35rem" }}>
+            <Zap size={16} /> <span>HIZLI KASA POS</span>
+          </span>
 
-      {/* SOL TARAF: Satış Formu ve Sepet */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="print-hidden">
+          <span
+            className="shortcut-badge"
+            onClick={() => {
+              prodSearchInputRef.current?.focus();
+              prodSearchInputRef.current?.select();
+            }}
+            title="Barkod veya Ürün Arama alanına odaklan (F2)"
+          >
+            <kbd>F2</kbd> <span>Ürün / Barkod Ara</span>
+          </span>
 
-        {/* Adım 1: Müşteri Seçimi */}
-        <section className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>1. Müşteri Bilgileri</h3>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowCustomerModal(true)}
-              style={{ padding: "0.35rem 0.65rem" }}
-            >
-              <UserPlus size={16} />
-              <span>Yeni Müşteri</span>
-            </button>
-          </div>
+          <span
+            className="shortcut-badge"
+            onClick={() => customerSelectRef.current?.focus()}
+            title="Müşteri seçim alanına odaklan (F4)"
+          >
+            <kbd>F4</kbd> <span>Müşteri Seç</span>
+          </span>
 
-          <div className="form-group">
-            <label className="form-label">Müşteri Seçin</label>
-            <select
-              className="form-control"
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              required
-            >
-              <option value="">-- Firma veya Müşteri Seçin --</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.company} ({c.name})
-                </option>
-              ))}
-            </select>
-          </div>
+          <span
+            className="shortcut-badge"
+            onClick={() => {
+              discountInputRef.current?.focus();
+              discountInputRef.current?.select();
+            }}
+            title="İskonto / İndirim tutarı alanına odaklan (F8)"
+          >
+            <kbd>F8</kbd> <span>İskonto</span>
+          </span>
+
+          <span
+            className="shortcut-badge"
+            onClick={() => submitButtonRef.current?.click()}
+            title="Satış kaydını onaya gönder (Ctrl+Enter / F9)"
+          >
+            <kbd>Ctrl+Enter</kbd> <span>Satışı Tamamla</span>
+          </span>
+
+          <span
+            className="shortcut-badge"
+            onClick={() => {
+              setProdSearch("");
+              setSelectedProductId("");
+            }}
+            title="Aramayı temizle veya pencereleri kapat (ESC)"
+          >
+            <kbd>ESC</kbd> <span>Temizle</span>
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowShortcutsModal(true)}
+          style={{ fontSize: "0.75rem", padding: "0.25rem 0.55rem", gap: "0.35rem" }}
+          title="Klavye Kısayolları Kılavuzunu Aç (F1)"
+        >
+          <Keyboard size={14} /> <span>Kısayollar [F1]</span>
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem" }} className="grid-cols-2">
+
+        {showScanner && (
+          <BarcodeScanner
+            onDetected={handleBarcodeDetected}
+            onClose={() => setShowScanner(false)}
+          />
+        )}
+
+        {/* SOL TARAF: Satış Formu ve Sepet */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+
+          {/* Adım 1: Müşteri Seçimi */}
+          <section className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>1. Müşteri Bilgileri</h3>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowCustomerModal(true)}
+                style={{ padding: "0.35rem 0.65rem" }}
+              >
+                <UserPlus size={16} />
+                <span>Yeni Müşteri</span>
+              </button>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Müşteri Seçin (Kısayol: F4)</label>
+              <select
+                ref={customerSelectRef}
+                className="form-control"
+                value={selectedCustomerId}
+                onChange={(e) => handleCustomerChange(e.target.value)}
+                required
+              >
+                <option value="">-- Firma veya Müşteri Seçin --</option>
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.company} ({c.name}) {c.defaultDiscountRate && c.defaultDiscountRate > 0 ? `[%${c.defaultDiscountRate} İskonto]` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
 
           {selectedCustomerId && (
             (() => {
@@ -656,7 +1021,24 @@ const Sales = () => {
                   border: "1px solid var(--border-color)",
                   fontSize: "0.85rem"
                 }}>
-                  <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{cust.company}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{cust.company}</div>
+                    <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+                      {cust.defaultDiscountRate && cust.defaultDiscountRate > 0 ? (
+                        <span className="badge badge-primary" style={{ fontSize: "0.72rem", fontWeight: 700 }}>
+                          %{cust.defaultDiscountRate} Sabit İskonto
+                        </span>
+                      ) : null}
+                      {typeof cust.currentBalance === "number" && (
+                        <span
+                          className={`badge badge-${cust.currentBalance > 0 ? "danger" : cust.currentBalance < 0 ? "success" : "secondary"}`}
+                          style={{ fontSize: "0.72rem", fontWeight: 700 }}
+                        >
+                          Cari Bakiye: {formatCurrency(cust.currentBalance)} {cust.currentBalance > 0 ? "(Borçlu)" : cust.currentBalance < 0 ? "(Alacaklı)" : "(Dengeli)"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "0.5rem", color: "var(--text-secondary)" }}>
                     <div><strong>Yetkili:</strong> {cust.name}</div>
                     <div><strong>Telefon:</strong> {cust.phone || "-"}</div>
@@ -672,7 +1054,22 @@ const Sales = () => {
 
         {/* Adım 2: Sepet Listesi */}
         <section className="card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>2. Satış Kalemleri (Sepet)</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>
+              2. Satış Kalemleri (Sepet) {cart.length > 0 && <span className="badge badge-primary" style={{ fontSize: "0.75rem", marginLeft: "0.4rem" }}>{cart.length} Kalem</span>}
+            </h3>
+            {cart.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleClearCart}
+                style={{ fontSize: "0.75rem", padding: "0.25rem 0.55rem", color: "var(--danger)", gap: "0.3rem" }}
+                title="Sepetteki tüm ürünleri boşalt"
+              >
+                <Trash2 size={13} /> <span>Sepeti Boşalt</span>
+              </button>
+            )}
+          </div>
 
           <div className="table-container" style={{ flex: 1, minHeight: "200px" }}>
             <table className="table">
@@ -680,17 +1077,21 @@ const Sales = () => {
                 <tr>
                   <th>Ürün</th>
                   <th style={{ textAlign: "right" }}>B. Fiyat</th>
-                  <th style={{ textAlign: "center" }}>Miktar</th>
+                  <th style={{ textAlign: "center", width: "120px" }}>Miktar</th>
                   <th style={{ textAlign: "center" }}>KDV (%)</th>
                   <th style={{ textAlign: "right" }}>Toplam</th>
-                  <th style={{ width: "50px" }}></th>
+                  <th style={{ width: "44px" }}></th>
                 </tr>
               </thead>
               <tbody>
                 {cart.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem" }}>
-                      Sepetiniz boş. Sağ panelden ürün arayıp ekleyin.
+                    <td colSpan={6} style={{ padding: "2rem 1rem" }}>
+                      <EmptyState
+                        icon={ShoppingCart}
+                        title="Sepetiniz Boş"
+                        description="Sağ paneldeki ürün arama alanından veya barkod okutarak sepete ürün ekleyebilirsiniz."
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -700,17 +1101,76 @@ const Sales = () => {
                         <div style={{ fontWeight: 600 }}>{item.productName}</div>
                         <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{item.productCode}</div>
                       </td>
-                      <td style={{ textAlign: "right" }}>{item.price.toFixed(2)} ₺</td>
-                      <td style={{ textAlign: "center", fontWeight: 600 }}>{item.quantity}</td>
+                      <td style={{ textAlign: "right" }}>{formatCurrency(item.price)}</td>
+                      <td style={{ textAlign: "center" }}>
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                            backgroundColor: "var(--bg-tertiary)",
+                            padding: "2px 6px",
+                            borderRadius: "var(--radius-sm)",
+                            border: "1px solid var(--border-color)"
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantity(idx, -1)}
+                            style={{
+                              width: "22px",
+                              height: "22px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: "3px",
+                              border: "1px solid var(--border-color)",
+                              background: "var(--bg-secondary)",
+                              cursor: "pointer",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              lineHeight: 1
+                            }}
+                            title="1 Azalt"
+                          >
+                            -
+                          </button>
+                          <span style={{ minWidth: "24px", textAlign: "center", fontWeight: 700, fontSize: "0.88rem" }}>
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQuantity(idx, +1)}
+                            style={{
+                              width: "22px",
+                              height: "22px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              borderRadius: "3px",
+                              border: "1px solid var(--border-color)",
+                              background: "var(--bg-secondary)",
+                              cursor: "pointer",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              lineHeight: 1
+                            }}
+                            title="1 Artır"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </td>
                       <td style={{ textAlign: "center" }}>%{item.taxRate}</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>{item.total.toFixed(2)} ₺</td>
-                      <td>
+                      <td style={{ textAlign: "right", fontWeight: 700, color: "var(--primary)" }}>{formatCurrency(item.total)}</td>
+                      <td style={{ textAlign: "center" }}>
                         <button
                           type="button"
                           onClick={() => handleRemoveFromSepet(idx)}
-                          style={{ color: "var(--danger)", cursor: "pointer" }}
+                          style={{ color: "var(--danger)", cursor: "pointer", padding: "0.25rem", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          title="Ürünü Sepetten Çıkar"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={15} />
                         </button>
                       </td>
                     </tr>
@@ -724,17 +1184,15 @@ const Sales = () => {
         {/* Geçmiş Satışlar ve Fiş Tekrar Yazdırma */}
         <section className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 600, margin: 0 }}>
-              {showAllHistory ? "Geçmiş Satışlarım & Fiş Yazdırma" : "Son 5 Satış & Fiş Yazdırma"}
-            </h3>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Son Satışlarınız ({salesHistory.length})</h3>
             {salesHistory.length > 5 && (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                style={{ fontSize: "0.75rem", padding: "0.2rem 0.55rem" }}
                 onClick={() => setShowAllHistory(!showAllHistory)}
+                style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}
               >
-                {showAllHistory ? "Son 5'i Göster" : `Tümünü Göster (${salesHistory.length})`}
+                {showAllHistory ? "Son 5 Kaydı Göster" : "Tümünü Göster"}
               </button>
             )}
           </div>
@@ -753,14 +1211,18 @@ const Sales = () => {
                     Tutar {sortField === "netAmount" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
                   </th>
                   <th style={{ textAlign: "center" }}>Durum</th>
-                  <th style={{ width: "120px", textAlign: "center" }}>İşlem</th>
+                  <th style={{ width: "130px", textAlign: "center" }}>İşlem</th>
                 </tr>
               </thead>
               <tbody>
                 {salesHistory.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: "1.5rem" }}>
-                      Henüz geçmiş satış kaydınız bulunmuyor.
+                    <td colSpan={5} style={{ padding: "1.5rem 1rem" }}>
+                      <EmptyState
+                        icon={FileText}
+                        title="Geçmiş Satış Kaydı Yok"
+                        description="Oluşturduğunuz satışlar onaylandığında veya beklemeye alındığında burada listelenir."
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -772,7 +1234,7 @@ const Sales = () => {
                         <td>
                           <div style={{ fontWeight: 600 }}>{sale.receiptNo}</div>
                           <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                            {new Date(sale.date).toLocaleDateString('tr-TR')}
+                            {formatDate(sale.date)}
                           </div>
                         </td>
                         <td>
@@ -781,7 +1243,7 @@ const Sales = () => {
                           </div>
                         </td>
                         <td style={{ textAlign: "right", fontWeight: 600 }}>
-                          {sale.netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+                          {formatCurrency(sale.netAmount)}
                         </td>
                         <td style={{ textAlign: "center" }}>
                           <span className={`badge badge-${sale.status === 'approved' ? 'success' : sale.status === 'rejected' ? 'danger' : 'warning'}`} style={{ fontSize: "0.6rem", padding: "0.15rem 0.35rem" }}>
@@ -789,7 +1251,7 @@ const Sales = () => {
                           </span>
                         </td>
                         <td style={{ textAlign: "center" }}>
-                          <div style={{ display: "flex", gap: "0.35rem", justifyContent: "center" }}>
+                          <div style={{ display: "flex", gap: "0.3rem", justifyContent: "center" }}>
                             <button
                               type="button"
                               className="btn btn-secondary btn-icon btn-sm"
@@ -802,6 +1264,16 @@ const Sales = () => {
                               aria-label="Bilgi Fişini Yazdır"
                             >
                               <Printer size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-icon btn-sm"
+                              onClick={() => handleRepeatSale(sale)}
+                              title="Siparişi Tekrarla (Sepete Aktar)"
+                              style={{ padding: "0.35rem" }}
+                              aria-label="Siparişi Tekrarla"
+                            >
+                              <RotateCcw size={14} />
                             </button>
                             {sale.status === "rejected" && (
                               <button
@@ -827,27 +1299,235 @@ const Sales = () => {
         </section>
       </div>
 
-      {/* SAĞ TARAF: Ürün Arama, Ekleme ve Satış Onay Özeti */}
+      {/* SAĞ TARAF: Hızlı Ürünler, Ürün Arama ve Satış Özeti */}
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="print-hidden">
+
+        {/* ⚡ HIZLI SATIŞ RAFI */}
+        <section className="card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <Zap size={18} color="var(--primary)" />
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>Hızlı Satış Rafı</h3>
+              {shelfProducts.length > 0 && (
+                <span className="badge badge-primary" style={{ fontSize: "0.72rem" }}>
+                  {shelfProducts.length} Ürün
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowShelfAddModal(true)}
+              style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem", gap: "0.35rem" }}
+              title="Hızlı satış rafına yeni ürün ekleyin"
+            >
+              <PlusCircle size={14} color="var(--primary)" /> <span>+ Hızlı Ürün Ekle</span>
+            </button>
+          </div>
+
+          {/* Raf Butonları Izgarası */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(135px, 1fr))", gap: "0.5rem", minHeight: "85px", maxHeight: "220px", overflowY: "auto" }}>
+            {shelfProducts.length === 0 ? (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  padding: "1.5rem 1rem",
+                  textAlign: "center",
+                  backgroundColor: "var(--bg-tertiary)",
+                  borderRadius: "var(--radius-sm)",
+                  border: "1.5px dashed var(--border-color)",
+                  fontSize: "0.85rem",
+                  color: "var(--text-muted)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "0.6rem"
+                }}
+              >
+                <span>Hızlı satış rafınız şu an boş. Sık sattığınız ürünleri ekleyerek tek tıkla sepete atabilirsiniz.</span>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowShelfAddModal(true)}
+                  style={{ fontSize: "0.78rem", padding: "0.35rem 0.8rem", gap: "0.35rem" }}
+                >
+                  <PlusCircle size={15} /> <span>+ Hızlı Ürün Ekle</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                {shelfProducts.map((p) => {
+                  const inCart = cart.find((item) => item.productId === p.id);
+                  const isOutOfStock = (p.stock ?? 0) <= 0;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => !isOutOfStock && handleQuickAddProduct(p)}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
+                        padding: "0.6rem 0.65rem",
+                        backgroundColor: inCart ? "rgba(15, 82, 186, 0.09)" : "var(--bg-tertiary)",
+                        border: inCart ? "1.5px solid var(--primary)" : "1px solid var(--border-color)",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: isOutOfStock ? "not-allowed" : "pointer",
+                        textAlign: "left",
+                        opacity: isOutOfStock ? 0.55 : 1,
+                        position: "relative",
+                        minHeight: "78px",
+                        transition: "all 0.12s ease",
+                        userSelect: "none"
+                      }}
+                      title={isOutOfStock ? "Tükendi" : `${p.name} (+1 sepete ekle)`}
+                    >
+                      {/* Sepet Miktarı Rozeti */}
+                      {inCart && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            top: "4px",
+                            left: "4px",
+                            backgroundColor: "var(--primary)",
+                            color: "#fff",
+                            borderRadius: "50%",
+                            width: "18px",
+                            height: "18px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "0.65rem",
+                            fontWeight: 800
+                          }}
+                        >
+                          {inCart.quantity}
+                        </span>
+                      )}
+
+                      {/* Sağ Üst: Raftan Kaldırma Butonu (-) */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleRemoveProductFromShelf(p.id, e)}
+                        style={{
+                          position: "absolute",
+                          top: "4px",
+                          right: "4px",
+                          width: "20px",
+                          height: "20px",
+                          borderRadius: "50%",
+                          backgroundColor: "rgba(239, 68, 68, 0.12)",
+                          color: "var(--danger)",
+                          border: "none",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          padding: 0,
+                          fontSize: "0.85rem",
+                          fontWeight: 900,
+                          transition: "all 0.12s ease"
+                        }}
+                        title="Bu ürünü hızlı satış rafından kaldır (-)"
+                        aria-label="Raftan kaldır"
+                      >
+                        <Minus size={13} strokeWidth={3} />
+                      </button>
+
+                      {/* Ürün İsmi */}
+                      <div style={{
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        color: "var(--text-primary)",
+                        lineHeight: 1.2,
+                        paddingTop: inCart ? "14px" : "0",
+                        paddingRight: "22px"
+                      }}>
+                        {p.name}
+                      </div>
+
+                      {/* Fiyat ve Stok */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "0.35rem" }}>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--primary)" }}>
+                          {formatCurrency(p.price || 0)}
+                        </span>
+                        <span style={{ fontSize: "0.65rem", fontWeight: 600, color: isOutOfStock ? "var(--danger)" : "var(--text-muted)" }}>
+                          {isOutOfStock ? "Tükendi" : `${p.stock ?? 0} Stk`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Rafın Sonundaki "+ Ekle" Butonu */}
+                <button
+                  type="button"
+                  onClick={() => setShowShelfAddModal(true)}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.35rem",
+                    padding: "0.6rem 0.65rem",
+                    border: "1.5px dashed var(--border-color)",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "transparent",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    minHeight: "78px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    transition: "all 0.15s ease"
+                  }}
+                  title="Hızlı satış rafına yeni ürün ekleyin"
+                >
+                  <PlusCircle size={18} color="var(--primary)" />
+                  <span>+ Ürün Ekle</span>
+                </button>
+              </>
+            )}
+          </div>
+        </section>
 
         {/* Ürün Arama & Ekleme */}
         <section className="card">
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Ürün Ekle</h3>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Ürün Ara & Ekle (Kısayol: F2)</h3>
 
           <div className="form-group">
-            <label className="form-label">Ürün Arama (İsim veya Barkod)</label>
+            <label className="form-label">Ürün Arama (İsim, Kod veya Barkod)</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <div style={{ position: "relative", flex: 1 }}>
                 <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
                   <Search size={16} />
                 </span>
                 <input
+                  ref={prodSearchInputRef}
                   type="text"
                   className="form-control"
                   style={{ paddingLeft: "2.25rem" }}
-                  placeholder="Ürün adı veya barkod okutun..."
+                  placeholder="Ürün adı, barkod okutun veya Enter'a basın..."
                   value={prodSearch}
                   onChange={(e) => setProdSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (selectedProductId) {
+                        handleAddToSepet();
+                      } else if (filteredProducts.length === 1) {
+                        handleQuickAddProduct(filteredProducts[0]);
+                        setProdSearch("");
+                      } else if (prodSearch.trim()) {
+                        const exactMatch = products.find(p =>
+                          p.code.toLowerCase() === prodSearch.trim().toLowerCase() ||
+                          ((p as any).barcode && (p as any).barcode.toLowerCase() === prodSearch.trim().toLowerCase())
+                        );
+                        if (exactMatch) {
+                          handleQuickAddProduct(exactMatch);
+                          setProdSearch("");
+                        }
+                      }
+                    }
+                  }}
                 />
               </div>
               <button
@@ -858,33 +1538,32 @@ const Sales = () => {
                   padding: "0 0.85rem",
                   borderRadius: "var(--radius-sm)",
                   border: "1px solid var(--border-color)",
-                  backgroundColor: "var(--bg-secondary)",
-                  color: "var(--primary)",
+                  backgroundColor: "var(--bg-tertiary)",
+                  color: "var(--text-primary)",
                   cursor: "pointer",
-                  display: "flex", alignItems: "center"
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
                 }}
               >
-                <ScanLine size={20} />
+                <ScanLine size={18} />
               </button>
             </div>
           </div>
 
           <div className="form-group">
-            <label className="form-label">Ürün Listesi</label>
+            <label className="form-label">Ürün Listesinden Seçin</label>
             <select
               className="form-control"
               value={selectedProductId}
               onChange={(e) => setSelectedProductId(e.target.value)}
             >
-              <option value="">-- Ürün Seçin --</option>
-              {filteredProducts.map(p => {
-                const isKritik = p.stock <= p.criticalStock;
-                return (
-                  <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                    {p.name} (Barkod: {p.barcode || p.code} | Stok: {p.stock} {p.unit}) {isKritik ? "⚠️" : ""}
-                  </option>
-                );
-              })}
+              <option value="">-- Listeden Ürün Seçin --</option>
+              {filteredProducts.map(p => (
+                <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                  {p.name} ({p.code}) - {formatCurrency(p.price)} {p.stock <= 0 ? "[TÜKENDİ]" : `[Stok: ${p.stock} ${p.unit || 'Adet'}]`}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -949,35 +1628,103 @@ const Sales = () => {
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", fontSize: "0.95rem", borderBottom: "1px dashed var(--border-color)", paddingBottom: "1rem", marginBottom: "1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ color: "var(--text-secondary)" }}>Ara Toplam (KDV Hariç)</span>
-              <span style={{ fontWeight: 600 }}>{totalBeforeTaxAndDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+              <span style={{ fontWeight: 600 }}>{formatCurrency(totalBeforeTaxAndDiscount)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ color: "var(--text-secondary)" }}>Toplam KDV</span>
-              <span style={{ fontWeight: 600 }}>{taxAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+              <span style={{ fontWeight: 600 }}>{formatCurrency(taxAmount)}</span>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginTop: "0.25rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: "var(--text-secondary)" }}>İndirim / İskonto</span>
+                <span style={{ color: "var(--text-secondary)" }}>İndirim / İskonto (F8)</span>
                 <input
+                  ref={discountInputRef}
                   type="number"
                   min="0"
                   style={{ width: "110px", padding: "0.25rem 0.5rem", textAlign: "right" }}
                   className="form-control"
                   placeholder="0.00"
-                  value={discountAmount}
+                  value={discountAmount || ""}
                   onChange={(e) => setDiscountAmount(Math.max(0, parseFloat(e.target.value) || 0))}
                 />
               </div>
+              {(() => {
+                const cust = customers.find(c => c.id === selectedCustomerId);
+                if (!cust?.defaultDiscountRate || cust.defaultDiscountRate <= 0) return null;
+                return (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.25rem", padding: "0.3rem 0.5rem", backgroundColor: "rgba(99, 102, 241, 0.08)", borderRadius: "var(--radius-sm)" }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 600 }}>
+                      🏷️ Müşteri İskontosu: %{cust.defaultDiscountRate}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: "0.15rem 0.45rem", fontSize: "0.7rem" }}
+                      onClick={() => {
+                        const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
+                        const calc = (subtotal * (cust.defaultDiscountRate || 0)) / 100;
+                        setDiscountAmount(Number(calc.toFixed(2)));
+                      }}
+                    >
+                      Uygula
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
             <span style={{ fontWeight: 700, fontSize: "1.05rem" }}>Net Toplam (Ödenecek)</span>
             <span style={{ fontWeight: 800, fontSize: "1.35rem", color: "var(--primary)" }}>
-              {netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+              {formatCurrency(netAmount)}
             </span>
           </div>
+
+          {/* Ödeme Yöntemi */}
+          <div className="form-group" style={{ marginBottom: "1rem" }}>
+            <label className="form-label" style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <CreditCard size={15} /> Ödeme Şekli
+            </label>
+            <select
+              className="form-control"
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+            >
+              <option value="open_account">Açık Hesap (Cari / Veresiye)</option>
+              <option value="cash">Nakit (Peşin)</option>
+              <option value="credit_card">Kredi Kartı / POS (Peşin)</option>
+              <option value="bank_transfer">Banka Havalesi / EFT</option>
+              <option value="check">Çek / Senet</option>
+            </select>
+          </div>
+
+          {paymentMethod === "check" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: "0.75rem" }}>Çek / Senet No</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
+                  placeholder="Çek No"
+                  value={checkNumber}
+                  onChange={(e) => setCheckNumber(e.target.value)}
+                />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: "0.75rem" }}>Vade Tarihi</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
+                  value={paymentDueDate}
+                  onChange={(e) => setPaymentDueDate(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Sipariş Notları</label>
@@ -994,6 +1741,7 @@ const Sales = () => {
           </div>
 
           <button
+            ref={submitButtonRef}
             type="button"
             className="btn btn-success"
             onClick={handleCreateSaleSubmit}
@@ -1034,6 +1782,9 @@ const Sales = () => {
           </div>
         </section>
 
+      </div>
+
+      {/* 2 Sütunlu Izgara Kapanışı */}
       </div>
 
       {/* --- MÜŞTERİ EKLEME MODALI --- */}
@@ -1202,6 +1953,7 @@ const Sales = () => {
                 <div><strong>Fiş No:</strong> {lastCreatedSale.receiptNo}</div>
                 <div><strong>Tarih:</strong> {new Date(lastCreatedSale.createdAt || lastCreatedSale.date).toLocaleString('tr-TR')}</div>
                 <div><strong>Satış Temsilcisi:</strong> {lastCreatedSale.salespersonName}</div>
+                <div><strong>Ödeme Şekli:</strong> {PAYMENT_METHOD_LABELS[lastCreatedSale.paymentMethod || "open_account"]} {lastCreatedSale.checkNumber ? `(Çek No: ${lastCreatedSale.checkNumber})` : ""}</div>
                 <div><strong>Durum:</strong> {lastCreatedSale.status === "approved" ? "Onaylandı" : lastCreatedSale.status === "rejected" ? "Reddedildi" : "Muhasebe Onayı Bekliyor"}</div>
                 {lastCreatedSale.status !== "pending_accounting" && lastCreatedSale.processedAt && (
                   <div><strong>İşlem Zamanı:</strong> {new Date(lastCreatedSale.processedAt).toLocaleString('tr-TR')} {lastCreatedSale.processedBy && `- ${lastCreatedSale.processedBy}`}</div>
@@ -1437,11 +2189,11 @@ const Sales = () => {
                     <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                       <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <span style={{ color: "var(--text-secondary)" }}>Toplam KDV</span>
-                        <span>{editTaxAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                        <span>{formatCurrency(editTaxAmount)}</span>
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
                         <span>Net Toplam</span>
-                        <span style={{ color: "var(--primary)", fontSize: "1rem" }}>{editNetAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                        <span style={{ color: "var(--primary)", fontSize: "1rem" }}>{formatCurrency(editNetAmount)}</span>
                       </div>
                     </div>
                   </div>
@@ -1464,6 +2216,240 @@ const Sales = () => {
           </div>
         );
       })()}
+
+      {/* --- KLAVYE KISAYOLLARI YARDIM MODALI (F1) --- */}
+      {showShortcutsModal && (
+        <div className="modal-overlay" onClick={() => setShowShortcutsModal(false)}>
+          <div
+            className="modal-content animate-slide-up"
+            style={{ maxWidth: "520px" }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Keyboard size={20} color="var(--primary)" />
+                <span>Hızlı Kasa & Klavye Kısayolları</span>
+              </h3>
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                style={{ cursor: "pointer", fontSize: "1.25rem" }}
+                aria-label="Kapat"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: 0 }}>
+                Satış işlemlerini fareye dokunmadan, ışık hızında tamamlamak için aşağıdaki klavye kısayollarını kullanabilirsiniz:
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.8rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>Barkod / Ürün Arama Alanına Odaklan</div>
+                  <kbd style={{ backgroundColor: "var(--bg-primary)", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 800, fontSize: "0.8rem" }}>F2</kbd>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.8rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>Müşteri Seçim Alanına Odaklan</div>
+                  <kbd style={{ backgroundColor: "var(--bg-primary)", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 800, fontSize: "0.8rem" }}>F4</kbd>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.8rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>İskonto / İndirim Alanına Odaklan</div>
+                  <kbd style={{ backgroundColor: "var(--bg-primary)", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 800, fontSize: "0.8rem" }}>F8</kbd>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.8rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>Satışı Onaya Gönder & Tamamla</div>
+                  <div style={{ display: "flex", gap: "0.3rem" }}>
+                    <kbd style={{ backgroundColor: "var(--bg-primary)", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 800, fontSize: "0.8rem" }}>Ctrl + Enter</kbd>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>veya</span>
+                    <kbd style={{ backgroundColor: "var(--bg-primary)", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 800, fontSize: "0.8rem" }}>F9</kbd>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.8rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>Arama Sıfırla / Modalları Kapat</div>
+                  <kbd style={{ backgroundColor: "var(--bg-primary)", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 800, fontSize: "0.8rem" }}>ESC</kbd>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.8rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>Kısayol Kılavuzunu Aç / Kapat</div>
+                  <kbd style={{ backgroundColor: "var(--bg-primary)", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border-color)", fontWeight: 800, fontSize: "0.8rem" }}>F1</kbd>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.8rem", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>Aramada Barkod Okutulduğunda</div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 700 }}>Otomatik Sepete Ekler</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowShortcutsModal(false)}
+                style={{ width: "100%" }}
+              >
+                Anladım, Kapat (ESC)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- HIZLI SATIŞ RAFINA ÜRÜN EKLE MODALI --- */}
+      {showShelfAddModal && (
+        <div className="modal-overlay" onClick={() => setShowShelfAddModal(false)}>
+          <div
+            className="modal-content animate-slide-up"
+            style={{ maxWidth: "620px", maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <PlusCircle size={20} color="var(--primary)" />
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Hızlı Satış Rafına Ürün Ekle</h3>
+              </div>
+              <button
+                onClick={() => setShowShelfAddModal(false)}
+                style={{ cursor: "pointer", fontSize: "1.25rem" }}
+                aria-label="Kapat"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "1rem", overflowY: "auto" }}>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", margin: 0 }}>
+                Hızlı satış rafınızda yer almasını istediğiniz ürüne tıklayarak ekleyin:
+              </p>
+
+              {/* Arama Kutusu */}
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
+                  <Search size={16} />
+                </span>
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{ paddingLeft: "2.25rem" }}
+                  placeholder="Rafa eklenecek ürün adı veya kodu ara..."
+                  value={shelfSearch}
+                  onChange={(e) => setShelfSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              {/* Ürün Listesi */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: "350px", overflowY: "auto", paddingRight: "2px" }}>
+                {products
+                  .filter((p) => {
+                    const s = shelfSearch.toLowerCase();
+                    return (
+                      (p.name || "").toLowerCase().includes(s) ||
+                      (p.code || "").toLowerCase().includes(s) ||
+                      ((p as any).categoryName || "").toLowerCase().includes(s)
+                    );
+                  })
+                  .map((p) => {
+                    const isOnShelf = shelfProductIds.includes(p.id);
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          if (isOnShelf) {
+                            handleRemoveProductFromShelf(p.id);
+                          } else {
+                            handleAddProductToShelf(p.id);
+                          }
+                        }}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "0.65rem 0.85rem",
+                          backgroundColor: isOnShelf ? "rgba(15, 82, 186, 0.08)" : "var(--bg-tertiary)",
+                          border: isOnShelf ? "1.5px solid var(--primary)" : "1px solid var(--border-color)",
+                          borderRadius: "var(--radius-sm)",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--text-primary)" }}>{p.name}</div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                              {p.code} • {p.stock ?? 0} {p.unit || "Adet"} Stok
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--primary)" }}>{formatCurrency(p.price || 0)}</div>
+                          </div>
+                          {isOnShelf ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.3rem",
+                                padding: "0.25rem 0.6rem",
+                                backgroundColor: "rgba(239, 68, 68, 0.12)",
+                                color: "var(--danger)",
+                                borderRadius: "var(--radius-sm)",
+                                fontSize: "0.75rem",
+                                fontWeight: 700
+                              }}
+                            >
+                              <Minus size={12} strokeWidth={3} /> Rafta (Çıkar)
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.3rem",
+                                padding: "0.25rem 0.6rem",
+                                backgroundColor: "var(--primary)",
+                                color: "#fff",
+                                borderRadius: "var(--radius-sm)",
+                                fontSize: "0.75rem",
+                                fontWeight: 700
+                              }}
+                            >
+                              <Plus size={12} strokeWidth={3} /> Rafa Ekle
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                Rafta Toplam <strong>{shelfProductIds.length}</strong> ürün bulunuyor.
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowShelfAddModal(false)}
+              >
+                Tamam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

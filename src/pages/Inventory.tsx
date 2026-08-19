@@ -11,6 +11,7 @@ import {
 } from "../services/db";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { formatCurrency } from "../utils/format";
 import * as XLSX from "xlsx";
 import {
   Plus,
@@ -24,7 +25,6 @@ import {
   FileSpreadsheet,
   PackageSearch,
   Rows3,
-  CheckCircle2,
   XCircle,
   PackageCheck,
   Camera,
@@ -738,10 +738,10 @@ const Inventory = () => {
                       </td>
                       <td>{p.categoryName}</td>
                       <td style={{ textAlign: "right", color: "var(--text-secondary)" }}>
-                        {(p.costPrice ?? 0) > 0 ? `${(p.costPrice as number).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺` : "—"}
+                        {(p.costPrice ?? 0) > 0 ? formatCurrency(p.costPrice as number) : "—"}
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        <div style={{ fontWeight: 600 }}>{p.price.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</div>
+                        <div style={{ fontWeight: 600 }}>{formatCurrency(p.price)}</div>
                         {(p.costPrice ?? 0) > 0 && (() => {
                           const margin = ((p.price - (p.costPrice as number)) / p.price * 100);
                           const color = margin >= 20 ? "var(--success)" : margin >= 10 ? "var(--warning-hover)" : "var(--danger)";

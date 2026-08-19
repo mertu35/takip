@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeSaleTotals, computeStockDeltas, formatReceiptNo } from "./salesMath";
+import { computeSaleTotals, computeStockDeltas, formatReceiptNo, formatPaymentReceiptNo, PAYMENT_METHOD_LABELS } from "./salesMath";
 import type { SaleItem } from "../types";
 
 function item(overrides: Partial<SaleItem> = {}): SaleItem {
@@ -134,5 +134,22 @@ describe("formatReceiptNo", () => {
 
   it("5 haneden büyük sıra numaralarını olduğu gibi (kesmeden) yazar", () => {
     expect(formatReceiptNo(2026, 123456)).toBe("TS-2026-123456");
+  });
+});
+
+describe("formatPaymentReceiptNo", () => {
+  it("tahsilat makbuzu numarasını THS-YYYY-NNNNN formatında üretir", () => {
+    expect(formatPaymentReceiptNo(2026, 1)).toBe("THS-2026-00001");
+    expect(formatPaymentReceiptNo(2026, 75)).toBe("THS-2026-00075");
+  });
+});
+
+describe("PAYMENT_METHOD_LABELS", () => {
+  it("tüm ödeme tipleri için Türkçe etiket tanımlar", () => {
+    expect(PAYMENT_METHOD_LABELS.open_account).toBe("Açık Hesap (Cari)");
+    expect(PAYMENT_METHOD_LABELS.cash).toBe("Nakit");
+    expect(PAYMENT_METHOD_LABELS.credit_card).toBe("Kredi Kartı / POS");
+    expect(PAYMENT_METHOD_LABELS.bank_transfer).toBe("Banka Havalesi / EFT");
+    expect(PAYMENT_METHOD_LABELS.check).toBe("Çek / Senet");
   });
 });

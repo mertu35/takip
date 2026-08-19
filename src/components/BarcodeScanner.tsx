@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader, IScannerControls } from "@zxing/browser";
-import { X, Camera, CameraOff, RefreshCw, AlertCircle } from "lucide-react";
+import { X, Camera, RefreshCw, AlertCircle } from "lucide-react";
 
 interface BarcodeScannerProps {
   onDetected: (code: string) => void;

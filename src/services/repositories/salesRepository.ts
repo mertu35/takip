@@ -28,12 +28,12 @@ import {
   addDoc
 } from "firebase/firestore";
 import { firestore, isFirebaseActive } from "../firebase";
-import type { ActorInfo, Role, Sale, SaleItem } from "../../types";
+import type { ActorInfo, Role, Sale, SaleItem, PaymentMethod } from "../../types";
 import { computeSaleTotals, computeStockDeltas, formatReceiptNo } from "../../utils/salesMath";
 import { getLocalData, setLocalData, randomId } from "./localStorageUtils";
 import { logsRepository } from "./logsRepository";
 import { notificationsRepository } from "./notificationsRepository";
-import type { Product } from "../../types";
+import type { Product, Customer } from "../../types";
 
 export interface NewSaleInput {
   salespersonId: string;
@@ -43,6 +43,9 @@ export interface NewSaleInput {
   customerCompany: string;
   items: SaleItem[];
   discountAmount: number;
+  paymentMethod?: PaymentMethod;
+  paymentDueDate?: string;
+  checkNumber?: string;
   notes?: string;
 }
 
@@ -136,6 +139,9 @@ const firebaseSalesRepository: SalesRepository = {
         customerCompany: saleData.customerCompany,
         items: saleData.items,
         notes: saleData.notes,
+        paymentMethod: saleData.paymentMethod || "open_account",
+        paymentDueDate: saleData.paymentDueDate || "",
+        checkNumber: saleData.checkNumber || "",
         discountAmount: saleData.discountAmount,
         ...totals,
         receiptNo,
@@ -195,10 +201,16 @@ const firebaseSalesRepository: SalesRepository = {
       }
 
       const totals = computeSaleTotals(newItems, discountAmount);
-      const updatedFields = { items: newItems, discountAmount, ...totals };
-      transaction.update(docRef, updatedFields);
+      updatedSale = {
+        ...currentSale,
+        id: saleId,
+        items: newItems,
+        discountAmount,
+        ...totals
+      };
 
-      updatedSale = { ...currentSale, id: saleId, ...updatedFields };
+      const { id: _, ...saleWithoutId } = updatedSale;
+      transaction.update(docRef, saleWithoutId);
     });
 
     await logsRepository.add(
@@ -247,6 +259,15 @@ const firebaseSalesRepository: SalesRepository = {
         for (const w of stockWrites) {
           transaction.update(w.ref, { stock: w.newStock });
         }
+      } else if (status === "approved" && (currentSale.paymentMethod === "open_account" || !currentSale.paymentMethod || currentSale.paymentMethod === "check")) {
+        // Müşteri borcuna ekle
+        const customerDocRef = doc(firestore!, "customers", currentSale.customerId);
+        const custSnap = await transaction.get(customerDocRef);
+        if (custSnap.exists()) {
+          const custData = custSnap.data() as Customer;
+          const oldBalance = typeof custData.currentBalance === "number" ? custData.currentBalance : 0;
+          transaction.update(customerDocRef, { currentBalance: oldBalance + currentSale.netAmount });
+        }
       }
 
       transaction.update(docRef, approvalData);
@@ -262,10 +283,12 @@ const firebaseSalesRepository: SalesRepository = {
     });
 
     const actionType = status === "approved" ? "APPROVE_SALE" : "REJECT_SALE";
+    const receiptLabel = currentSale.receiptNo ? `${currentSale.receiptNo} numaralı` : `${saleId} ID'li`;
+    const customerLabel = currentSale.customerCompany || currentSale.customerName ? ` (${currentSale.customerCompany || currentSale.customerName})` : "";
     const detailMsg =
       status === "approved"
-        ? `${saleId} ID'li satış onaylandı. (Mikro'ya işlendi: ${isMicroProcessed ? "Evet" : "Hayır"})`
-        : `${saleId} ID'li satış reddedildi, stok iade edildi. Nedeni: ${notes}`;
+        ? `${receiptLabel}${customerLabel} satış onaylandı. (Mikro'ya işlendi: ${isMicroProcessed ? "Evet" : "Hayır"})`
+        : `${receiptLabel}${customerLabel} satış reddedildi, stok iade edildi. Nedeni: ${notes}`;
     await logsRepository.add(actor, actionType, detailMsg);
 
     const notifMsg =
@@ -397,6 +420,9 @@ const mockSalesRepository: SalesRepository = {
       customerCompany: saleData.customerCompany,
       items: saleData.items,
       notes: saleData.notes,
+      paymentMethod: saleData.paymentMethod || "open_account",
+      paymentDueDate: saleData.paymentDueDate || "",
+      checkNumber: saleData.checkNumber || "",
       discountAmount: saleData.discountAmount,
       ...totals,
       receiptNo,
@@ -477,6 +503,14 @@ const mockSalesRepository: SalesRepository = {
         if (pIdx !== -1) products[pIdx].stock += item.quantity;
       }
       setLocalData("takip_products", products);
+    } else if (status === "approved" && (oldSale.paymentMethod === "open_account" || !oldSale.paymentMethod || oldSale.paymentMethod === "check")) {
+      const customers = getLocalData<Customer>("takip_customers");
+      const custIdx = customers.findIndex((c) => c.id === oldSale.customerId);
+      if (custIdx !== -1) {
+        const oldBalance = typeof customers[custIdx].currentBalance === "number" ? customers[custIdx].currentBalance : 0;
+        customers[custIdx].currentBalance = oldBalance + oldSale.netAmount;
+        setLocalData("takip_customers", customers);
+      }
     }
 
     sales[idx] = {
@@ -501,10 +535,11 @@ const mockSalesRepository: SalesRepository = {
     setLocalData("takip_approvals", approvals);
 
     const actionType = status === "approved" ? "APPROVE_SALE" : "REJECT_SALE";
+    const custLabel = oldSale.customerCompany || oldSale.customerName ? ` (${oldSale.customerCompany || oldSale.customerName})` : "";
     const detailMsg =
       status === "approved"
-        ? `${oldSale.receiptNo} numaralı satış onaylandı. (Mikro'ya işlendi: ${isMicroProcessed ? "Evet" : "Hayır"})`
-        : `${oldSale.receiptNo} numaralı satış reddedildi, stok iade edildi. Nedeni: ${notes}`;
+        ? `${oldSale.receiptNo} numaralı${custLabel} satış onaylandı. (Mikro'ya işlendi: ${isMicroProcessed ? "Evet" : "Hayır"})`
+        : `${oldSale.receiptNo} numaralı${custLabel} satış reddedildi, stok iade edildi. Nedeni: ${notes}`;
     await logsRepository.add(actor, actionType, detailMsg);
 
     const notifMsg =

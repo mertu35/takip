@@ -1,7 +1,8 @@
 // Takip Sistemi - Yönetici Paneli (Dashboard)
 import React, { useState, useEffect, useMemo } from "react";
-import { getSales, getProducts } from "../services/db";
+import { getSales, getProducts, getCustomers, getPayments } from "../services/db";
 import { useTheme } from "../context/ThemeContext";
+import { formatCurrency, formatDate } from "../utils/format";
 import {
   AreaChart, Area,
   BarChart, Bar,
@@ -19,20 +20,14 @@ import {
   Calendar,
   Clock,
   ArrowRight,
-  Percent
+  Wallet,
+  Receipt
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { Sale, Product } from "../types";
+import type { Sale, Product, Customer, Payment } from "../types";
 
-// Recharts, renkleri SVG "presentation attribute"larına yazar
-// (stroke/fill/stop-color). CSS değişkenleri bu attribute'larda WebKit/Safari
-// tarafından çözülmez; oraya `var(--primary)` verilirse grafik Safari'de
-// renksiz kalır. Bu yüzden grafiklere düz renk değeri veriyoruz.
-//
-// Değerler bilinçli olarak index.css'teki tema değişkenlerinin kopyasıdır:
-// DOM'dan getComputedStyle ile okumak güvenilir değil, çünkü ThemeProvider
-// `data-theme` niteliğini bir effect içinde yazıyor; render sırasında yapılan
-// okuma hep bir tema geride kalıyor. Paleti index.css ile birlikte güncelleyin.
+type DashboardDateFilter = "all" | "today" | "week" | "month" | "custom";
+
 const CHART_PALETTE = {
   light: { primary: "#1e3a8a", warning: "#c2410c", border: "#cbd5e1", textSecondary: "#334155" },
   dark: { primary: "#3b82f6", warning: "#f97316", border: "#242f49", textSecondary: "#94a3b8" }
@@ -41,17 +36,31 @@ const CHART_PALETTE = {
 const Dashboard = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const { theme } = useTheme();
+
+  // Tarih Filtresi State
+  const [dateFilter, setDateFilter] = useState<DashboardDateFilter>("all");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
 
   const chartColor = useMemo(() => CHART_PALETTE[theme] ?? CHART_PALETTE.light, [theme]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [salesData, productsData] = await Promise.all([getSales(), getProducts()]);
+        const [salesData, productsData, customersData, paymentsData] = await Promise.all([
+          getSales(),
+          getProducts(),
+          getCustomers(),
+          getPayments().catch(() => [] as Payment[])
+        ]);
         setSales(salesData);
         setProducts(productsData);
+        setCustomers(customersData);
+        setPayments(paymentsData);
       } catch (err) {
         console.error("Dashboard verileri yüklenirken hata:", err);
       } finally {
@@ -60,6 +69,39 @@ const Dashboard = () => {
     };
     fetchData();
   }, []);
+
+  // Tarih Filtreleme Fonksiyonu
+  const matchesDate = (dateStr: string): boolean => {
+    if (dateFilter === "all") return true;
+
+    const saleDate = new Date(dateStr);
+    const now = new Date();
+
+    if (dateFilter === "today") {
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return saleDate >= startOfToday;
+    }
+
+    if (dateFilter === "week") {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return saleDate >= weekAgo;
+    }
+
+    if (dateFilter === "month") {
+      const monthAgo = new Date();
+      monthAgo.setDate(monthAgo.getDate() - 30);
+      return saleDate >= monthAgo;
+    }
+
+    if (dateFilter === "custom") {
+      if (customStartDate && saleDate < new Date(`${customStartDate}T00:00:00`)) return false;
+      if (customEndDate && saleDate > new Date(`${customEndDate}T23:59:59`)) return false;
+      return true;
+    }
+
+    return true;
+  };
 
   if (loading) {
     return (
@@ -89,8 +131,10 @@ const Dashboard = () => {
     );
   }
 
-  const approvedSales = sales.filter(s => s.status === "approved");
-  const pendingSales = sales.filter(s => s.status === "pending_accounting");
+  // Filtrelenmiş Satışlar
+  const allApprovedSales = sales.filter(s => s.status === "approved");
+  const approvedSales = allApprovedSales.filter(s => matchesDate(s.date));
+  const pendingSales = sales.filter(s => s.status === "pending_accounting" && matchesDate(s.date));
 
   const totalRevenue = approvedSales.reduce((sum, s) => sum + (s.netAmount || 0), 0);
 
@@ -101,31 +145,34 @@ const Dashboard = () => {
     }, 0);
     return sum + saleProfit;
   }, 0);
+
   const hasCostData = approvedSales.some(s => (s.items || []).some((i: any) => (i.costPrice ?? 0) > 0));
   const profitMarginPct: number | null = totalRevenue > 0 && hasCostData ? (grossProfit / totalRevenue * 100) : null;
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
   const oneMonthAgo = new Date();
   oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
 
-  const dailySalesRevenue = approvedSales
+  const dailySalesRevenue = allApprovedSales
     .filter(s => new Date(s.date) >= startOfToday)
     .reduce((sum, s) => sum + (s.netAmount || 0), 0);
 
-  const weeklySalesRevenue = approvedSales
+  const weeklySalesRevenue = allApprovedSales
     .filter(s => new Date(s.date) >= oneWeekAgo)
     .reduce((sum, s) => sum + (s.netAmount || 0), 0);
 
-  const monthlySalesRevenue = approvedSales
+  const monthlySalesRevenue = allApprovedSales
     .filter(s => new Date(s.date) >= oneMonthAgo)
     .reduce((sum, s) => sum + (s.netAmount || 0), 0);
 
   const criticalStockProducts = products.filter(p => p.stock <= p.criticalStock);
+
+  const filteredPayments = payments.filter(p => matchesDate(p.date));
+  const totalCollections = filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalReceivables = customers.reduce((sum, c) => sum + Math.max(0, c.currentBalance || 0), 0);
 
   const productSalesMap: Record<string, any> = {};
   approvedSales.forEach(sale => {
@@ -198,7 +245,7 @@ const Dashboard = () => {
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
 
-      const dayTotal = approvedSales
+      const dayTotal = allApprovedSales
         .filter(s => {
           const saleDate = new Date(s.date);
           return saleDate >= dayStart && saleDate <= dayEnd;
@@ -212,113 +259,260 @@ const Dashboard = () => {
 
   const trendData = getSalesTrendData();
 
+  const dateFilterLabels: Record<DashboardDateFilter, string> = {
+    all: "Tümü",
+    today: "Bugün",
+    week: "Bu Hafta",
+    month: "Bu Ay",
+    custom: "Özel Tarih"
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
 
+      {/* Üst Banner & Patron Raporu Geçişi */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "1rem"
+      }}>
+        <div>
+          <h2 style={{ fontSize: "1.35rem", fontWeight: 800 }}>Yönetici Dashboard</h2>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginTop: "0.2rem" }}>
+            Şirket genel operasyon özeti ve gerçek zamanlı satış grafikleri
+          </p>
+        </div>
+
+        <Link
+          to="/reports"
+          className="btn btn-primary"
+          style={{
+            gap: "0.45rem",
+            padding: "0.55rem 1.1rem",
+            fontSize: "0.9rem",
+            fontWeight: 700,
+            textDecoration: "none",
+            boxShadow: "0 2px 8px rgba(15, 82, 186, 0.25)"
+          }}
+        >
+          <TrendingUp size={18} />
+          <span>👑 Patron & Yönetici Raporları</span>
+          <ArrowRight size={16} />
+        </Link>
+      </div>
+
+      {/* Tarih Filtreleme Çubuğu */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "1rem",
+        padding: "0.75rem 1.25rem",
+        backgroundColor: "var(--bg-secondary)",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--border-color)"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <Calendar size={18} color="var(--primary)" />
+          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Rapor Dönemi:</span>
+          {dateFilter !== "all" && (
+            <span className="badge badge-primary" style={{ fontSize: "0.75rem" }}>
+              {dateFilterLabels[dateFilter]}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+          {(["all", "today", "week", "month", "custom"] as DashboardDateFilter[]).map((f) => {
+            const isActive = dateFilter === f;
+            return (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setDateFilter(f)}
+                className={`btn btn-sm ${isActive ? "btn-primary" : "btn-secondary"}`}
+                style={{ padding: "0.25rem 0.65rem", fontSize: "0.78rem" }}
+              >
+                {dateFilterLabels[f]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Özel Tarih Aralığı Seçim Çubuğu */}
+      {dateFilter === "custom" && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          padding: "0.75rem 1rem",
+          backgroundColor: "var(--bg-tertiary)",
+          borderRadius: "var(--radius-sm)",
+          flexWrap: "wrap"
+        }} className="animate-slide-up">
+          <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+            Aralık Seçin:
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Başlangıç:</span>
+            <input
+              type="date"
+              className="form-control"
+              style={{ width: "140px", padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
+              value={customStartDate}
+              onChange={e => setCustomStartDate(e.target.value)}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Bitiş:</span>
+            <input
+              type="date"
+              className="form-control"
+              style={{ width: "140px", padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
+              value={customEndDate}
+              onChange={e => setCustomEndDate(e.target.value)}
+            />
+          </div>
+          {(customStartDate || customEndDate) && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}
+              onClick={() => { setCustomStartDate(""); setCustomEndDate(""); }}
+            >
+              Tarihleri Temizle
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Üst KPI Kartları */}
       <section className="grid-cols-4">
         <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--success-light)", color: "var(--success)" }}>
             <DollarSign size={24} />
           </div>
           <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Toplam Ciro</div>
-            <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>
-              {totalRevenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+              {dateFilter === "all" ? "Toplam Ciro" : `Dönem Cirosu (${dateFilterLabels[dateFilter]})`}
+            </div>
+            <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text-primary)" }}>
+              {formatCurrency(totalRevenue)}
             </div>
           </div>
         </div>
 
-        <Link to="/accounting" className="card" style={{ display: "flex", alignItems: "center", gap: "1rem", cursor: "pointer" }}>
-          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: pendingSales.length > 0 ? "var(--warning-light)" : "var(--primary-light)", color: pendingSales.length > 0 ? "var(--warning)" : "var(--primary)" }}>
+        <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--primary-light)", color: "var(--primary)" }}>
             <CheckSquare size={24} />
           </div>
           <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Bekleyen Onay</div>
-            <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>
-              {pendingSales.length} Kayıt
+            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Onaylanan Satış</div>
+            <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text-primary)" }}>
+              {approvedSales.length} Adet
             </div>
           </div>
-        </Link>
+        </div>
 
-        <Link to="/inventory" className="card" style={{ display: "flex", alignItems: "center", gap: "1rem", cursor: "pointer" }}>
-          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: criticalStockProducts.length > 0 ? "var(--danger-light)" : "var(--primary-light)", color: criticalStockProducts.length > 0 ? "var(--danger)" : "var(--primary)" }}>
+        <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--warning-light)", color: "var(--warning)" }}>
+            <Clock size={24} />
+          </div>
+          <div>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Onay Bekleyen</div>
+            <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text-primary)" }}>
+              {pendingSales.length} Adet
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--danger-light)", color: "var(--danger)" }}>
             <AlertTriangle size={24} />
           </div>
           <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Kritik Stok Uyarısı</div>
-            <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>
-              {criticalStockProducts.length} Ürün
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/inventory" className="card" style={{ display: "flex", alignItems: "center", gap: "1rem", cursor: "pointer" }}>
-          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--info-light)", color: "var(--info)" }}>
-            <Package size={24} />
-          </div>
-          <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Toplam Ürün Çeşidi</div>
-            <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>
-              {products.length} Barkod
-            </div>
-          </div>
-        </Link>
-      </section>
-
-      {hasCostData && (
-        <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }} className="grid-cols-2">
-          <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--success-light)", color: "var(--success)" }}>
-              <TrendingUp size={24} />
-            </div>
-            <div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Toplam Brüt Kar</div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem", color: grossProfit >= 0 ? "var(--success)" : "var(--danger)" }}>
-                {grossProfit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-              </div>
-            </div>
-          </div>
-          <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: (profitMarginPct ?? 0) >= 20 ? "var(--success-light)" : (profitMarginPct ?? 0) >= 10 ? "var(--warning-light)" : "var(--danger-light)", color: (profitMarginPct ?? 0) >= 20 ? "var(--success)" : (profitMarginPct ?? 0) >= 10 ? "var(--warning-hover)" : "var(--danger)" }}>
-              <Percent size={24} />
-            </div>
-            <div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 500 }}>Ortalama Kar Marjı</div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: "0.25rem" }}>
-                %{profitMarginPct?.toFixed(1) ?? "—"}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section className="card" style={{ padding: "1.5rem" }}>
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <Calendar size={18} />
-          <span>Dönemsel Satış Performansı</span>
-        </h3>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
-          <div style={{ padding: "1rem", backgroundColor: "var(--bg-primary)", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--primary)" }}>
-            <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 500 }}>GÜNLÜK CİRO</span>
-            <div style={{ fontSize: "1.25rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--text-primary)" }}>
-              {dailySalesRevenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-            </div>
-          </div>
-          <div style={{ padding: "1rem", backgroundColor: "var(--bg-primary)", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--info)" }}>
-            <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 500 }}>HAFTALIK CİRO</span>
-            <div style={{ fontSize: "1.25rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--text-primary)" }}>
-              {weeklySalesRevenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-            </div>
-          </div>
-          <div style={{ padding: "1rem", backgroundColor: "var(--bg-primary)", borderRadius: "var(--radius-sm)", borderLeft: "4px solid var(--success)" }}>
-            <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: 500 }}>AYLIK CİRO</span>
-            <div style={{ fontSize: "1.25rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--text-primary)" }}>
-              {monthlySalesRevenue.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+            <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Kritik Stok Ürün</div>
+            <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--danger)" }}>
+              {criticalStockProducts.length} Çeşit
             </div>
           </div>
         </div>
       </section>
 
+      {/* Dönemsel Satış ve Kar Özeti */}
+      <section className="grid-cols-4">
+        <div className="card">
+          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>Bugünkü Ciro</div>
+          <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-primary)" }}>
+            {formatCurrency(dailySalesRevenue)}
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>Bu Haftaki Ciro</div>
+          <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-primary)" }}>
+            {formatCurrency(weeklySalesRevenue)}
+          </div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>Bu Ayki Ciro</div>
+          <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-primary)" }}>
+            {formatCurrency(monthlySalesRevenue)}
+          </div>
+        </div>
+        <div className="card" style={{ position: "relative", overflow: "hidden" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Tahmini Brüt Kâr</div>
+            {profitMarginPct !== null && (
+              <span className="badge badge-success" style={{ fontSize: "0.68rem", fontWeight: 700 }}>
+                %{profitMarginPct.toFixed(1)} Marj
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: "1.2rem", fontWeight: 700, color: hasCostData ? "var(--success)" : "var(--text-muted)" }}>
+            {hasCostData ? formatCurrency(grossProfit) : "—"}
+          </div>
+          {!hasCostData && (
+            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
+              Maliyet fiyatı girildiğinde hesaplanır
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Finansal Durum & Cari Alacak Özeti */}
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
+        <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "rgba(16, 185, 129, 0.12)", color: "var(--success)" }}>
+            <Wallet size={24} />
+          </div>
+          <div>
+            <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+              {dateFilter === "all" ? "Toplam Tahsilat" : `Dönem Tahsilatı (${dateFilterLabels[dateFilter]})`}
+            </div>
+            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--success)" }}>
+              {formatCurrency(totalCollections)}
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", backgroundColor: "rgba(239, 68, 68, 0.12)", color: "var(--danger)" }}>
+            <Receipt size={24} />
+          </div>
+          <div>
+            <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Toplam Piyasa Alacağı (Cari Borç)</div>
+            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--danger)" }}>
+              {formatCurrency(totalReceivables)}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Grafikler: Satış Trendi & Personel Performansı */}
       <section style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem" }} className="grid-cols-2">
 
         <div className="card" style={{ display: "flex", flexDirection: "column" }}>
@@ -338,7 +532,7 @@ const Dashboard = () => {
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={(v: any) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 11, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} width={48} />
               <Tooltip
-                formatter={(v: any) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, "Ciro"]}
+                formatter={(v: any) => [formatCurrency(v), "Ciro"]}
                 contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.85rem" }}
                 labelStyle={{ fontWeight: 700, color: "var(--text-primary)" }}
               />
@@ -367,7 +561,7 @@ const Dashboard = () => {
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
                       <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{sp.name}</span>
                       <span style={{ fontWeight: 700, color: "var(--primary)" }}>
-                        {sp.totalRevenue.toLocaleString('tr-TR')} ₺
+                        {formatCurrency(sp.totalRevenue)}
                       </span>
                     </div>
                     <div style={{ height: "8px", width: "100%", backgroundColor: "var(--bg-tertiary)", borderRadius: "var(--radius-full)", overflow: "hidden" }}>
@@ -391,6 +585,7 @@ const Dashboard = () => {
         </div>
       </section>
 
+      {/* Kategori Bazlı Dağılım */}
       {categorySales.length > 0 && (() => {
         const PIE_COLORS = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316"];
         return (
@@ -405,7 +600,7 @@ const Dashboard = () => {
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} angle={-25} textAnchor="end" interval={0} />
                   <YAxis tickFormatter={(v: any) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v} tick={{ fontSize: 10, fill: chartColor.textSecondary }} axisLine={false} tickLine={false} width={44} />
                   <Tooltip
-                    formatter={(v: any) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`, "Ciro"]}
+                    formatter={(v: any) => [formatCurrency(v), "Ciro"]}
                     contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}
                   />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
@@ -426,7 +621,7 @@ const Dashboard = () => {
                       {categorySales.map((_, idx) => <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />)}
                     </Pie>
                     <Tooltip
-                      formatter={(v: any) => [`${v.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺`]}
+                      formatter={(v: any) => [formatCurrency(v)]}
                       contentStyle={{ backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}
                     />
                   </PieChart>
@@ -445,6 +640,7 @@ const Dashboard = () => {
         );
       })()}
 
+      {/* En Çok Satan Ürünler & Son Onay Bekleyen Satışlar */}
       <section className="grid-cols-2">
         <div className="card">
           <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -465,8 +661,8 @@ const Dashboard = () => {
               <tbody>
                 {topSellingProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: "center", color: "var(--text-muted)" }}>
-                      Satış kaydı bulunamadı.
+                    <td colSpan={4} style={{ textAlign: "center", color: "var(--text-muted)", padding: "1.5rem" }}>
+                      Seçilen döneme ait satış kaydı bulunamadı.
                     </td>
                   </tr>
                 ) : (
@@ -478,10 +674,10 @@ const Dashboard = () => {
                       </td>
                       <td style={{ textAlign: "center", fontWeight: 600 }}>{p.quantity} Adet</td>
                       <td style={{ textAlign: "right", fontWeight: 700, color: "var(--success)" }}>
-                        {p.revenue.toLocaleString('tr-TR')} ₺
+                        {formatCurrency(p.revenue)}
                       </td>
                       <td style={{ textAlign: "right", fontWeight: 600, color: p.hasCost ? (p.profit >= 0 ? "var(--success)" : "var(--danger)") : "var(--text-muted)", fontSize: "0.85rem" }}>
-                        {p.hasCost ? `${p.profit.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺` : "—"}
+                        {p.hasCost ? formatCurrency(p.profit) : "—"}
                       </td>
                     </tr>
                   ))
@@ -527,12 +723,12 @@ const Dashboard = () => {
                       {sale.customerCompany}
                     </span>
                     <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                      Tarih: {new Date(sale.date).toLocaleDateString('tr-TR')} | Temsilci: {sale.salespersonName}
+                      Tarih: {formatDate(sale.date)} | Temsilci: {sale.salespersonName}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: "0.95rem" }}>
-                      {sale.netAmount.toLocaleString('tr-TR')} ₺
+                      {formatCurrency(sale.netAmount)}
                     </div>
                     <span className="badge badge-warning" style={{ fontSize: "0.6rem", padding: "0.1rem 0.4rem", marginTop: "0.25rem" }}>
                       ONAY BEKLİYOR

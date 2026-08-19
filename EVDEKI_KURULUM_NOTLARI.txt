@@ -1,0 +1,54 @@
+=====================================================
+ÖZKON YAPI TAKİP SİSTEMİ - AKŞAM KURULUM NOTLARI
+Tarih: 17 Ağustos 2026
+=====================================================
+
+Kanki selam! Bugün şirkette yaptığımız tüm geliştirmeler 
+GitHub ve Firebase bulutuna başarıyla yüklendi.
+
+🏠 EVDEKİ BİLGİSAYARDA YAPILACAKLAR (ADIM ADIM):
+-------------------------------------------------
+1. Evdeki bilgisayarda proje klasörüne git ve terminali (PowerShell / CMD) aç.
+2. Son kodları çekmek için şu komutu yaz:
+   git pull origin main
+
+3. Projeyi ayağa kaldırmak için:
+   npm run dev
+
+4. Tarayıcıdan aç:
+   http://localhost:5173
+
+
+🌐 CANLI SİSTEM (HER YERDEN ERİŞİLEBİLİR):
+-------------------------------------------------
+Canlı Uygulama Linki: https://ozkon-celik-takip.web.app
+
+Giriş Bilgileri:
+- Yönetici (Patron): Kullanıcı Adı: admin | Şifre: admin123
+- Muhasebe: Kullanıcı Adı: muhasebe | Şifre: accounting123
+- Satış (Ali Satışçı): Kullanıcı Adı: satis | Şifre: sales123
+- Satış (Ali Bilgin): Kullanıcı Adı: ali.bilgin | Şifre: 123456
+- Sistem Yöneticisi: Kullanıcı Adı: sysadmin | Şifre: sysadmin123
+
+
+🔥 BUGÜN NELERİ ÇÖZDÜK & GELİŞTİRDİK?
+-------------------------------------------------
+1. Marka ve Kurumsal Kimlik:
+   - Şirket adı "Özkon Yapı" olarak güncellendi.
+   - Resmi vektörel SVG logosu entegre edildi.
+
+2. Yazdırma Motoru (Receipt Print Engine):
+   - Fişlerin beyaz çıkma ve kayma sorunu izole iframe mimarisiyle %100 çözüldü.
+
+3. Kullanıcı Yönetimi & Şifre Standardı:
+   - Admin personel eklerken artık şifre boş bırakılsa dahi varsayılan 123456 atanıyor.
+   - Personel oluşturulduğunda kullanıcı adı ve şifresini gösteren yeşil bilgi kartı eklendi.
+   - Tabloda "Kullanıcı Adı" sadeleştirildi ve şık Yetki Rozetleri eklendi.
+   - "Personeli Düzenle" modalı ve Windows alert yerine modern "Personel Silme Onay Modalı" getirildi.
+
+4. Hata Mesajları & Güvenlik:
+   - Giriş ekranında teknik Firebase kodları temizlendi, sade "Hatalı kullanıcı adı ya da şifre!" uyarısına geçildi.
+   - Muhasebe ekranında "Reddet" butonuna basınca stok iadesinde çıkan Firebase yetki hatası (firestore.rules) düzeltildi.
+
+Akşam evde görüşmek üzere, iyi istirahatler!
+=====================================================

@@ -514,9 +514,14 @@ const SettingsPage = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={4} style={{ textAlign: "center", padding: "1.5rem" }}>Yükleniyor...</td>
-                  </tr>
+                  [1, 2, 3].map((i) => (
+                    <tr key={i}>
+                      <td><div className="skeleton" style={{ height: "18px", width: "120px" }} /></td>
+                      <td><div className="skeleton" style={{ height: "18px", width: "160px" }} /></td>
+                      <td><div className="skeleton" style={{ height: "18px", width: "90px" }} /></td>
+                      <td style={{ textAlign: "center" }}><div className="skeleton" style={{ height: "24px", width: "80px", margin: "0 auto" }} /></td>
+                    </tr>
+                  ))
                 ) : (
                   users.map((u, idx) => {
                     const isSelf = u.uid === currentUser?.uid;
@@ -783,8 +788,13 @@ const SettingsPage = () => {
           </p>
 
           {profileLoading ? (
-            <div style={{ textAlign: "center", padding: "1rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              Yükleniyor...
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div className="skeleton" style={{ height: "40px", width: "100%" }} />
+              <div className="skeleton" style={{ height: "60px", width: "100%" }} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div className="skeleton" style={{ height: "40px" }} />
+                <div className="skeleton" style={{ height: "40px" }} />
+              </div>
             </div>
           ) : (
             <form onSubmit={handleUpdateProfile} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>

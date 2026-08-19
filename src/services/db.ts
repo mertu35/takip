@@ -13,6 +13,8 @@ import type {
   Customer,
   Sale,
   SaleItem,
+  Payment,
+  PaymentMethod,
   AppNotification,
   LogEntry,
   Announcement,
@@ -25,6 +27,7 @@ import { productsRepository } from "./repositories/productsRepository";
 import { categoriesRepository } from "./repositories/categoriesRepository";
 import { customersRepository, getSalesByCustomer as _getSalesByCustomer } from "./repositories/customersRepository";
 import { salesRepository } from "./repositories/salesRepository";
+import { paymentsRepository, type NewPaymentInput } from "./repositories/paymentsRepository";
 import { notificationsRepository } from "./repositories/notificationsRepository";
 import { logsRepository } from "./repositories/logsRepository";
 import { announcementsRepository } from "./repositories/announcementsRepository";
@@ -152,12 +155,52 @@ export const addSale = (
     customerCompany: string;
     items: SaleItem[];
     discountAmount: number;
+    paymentMethod?: PaymentMethod;
+    paymentDueDate?: string;
+    checkNumber?: string;
     notes?: string;
   },
   currentUserId: string,
   currentUserName: string,
   currentUserRole: Role | string
 ) => salesRepository.add(saleData, actorOf(currentUserId, currentUserName, currentUserRole));
+
+// --- TAHSİLATLAR (PAYMENTS) ---
+export const getPayments = (): Promise<Payment[]> =>
+  paymentsRepository.getAll();
+
+export const getPaymentsByCustomer = (customerId: string): Promise<Payment[]> =>
+  paymentsRepository.getByCustomer(customerId);
+
+export const addPayment = (
+  paymentData: NewPaymentInput,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) => paymentsRepository.add(paymentData, actorOf(currentUserId, currentUserName, currentUserRole));
+
+export const deletePayment = (
+  paymentId: string,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) => paymentsRepository.remove(paymentId, actorOf(currentUserId, currentUserName, currentUserRole));
+
+export const collectSaleCheck = (
+  saleId: string,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string,
+  notes?: string
+) => paymentsRepository.collectSaleCheck(saleId, actorOf(currentUserId, currentUserName, currentUserRole), notes);
+
+export const bounceSaleCheck = (
+  saleId: string,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string,
+  notes?: string
+) => paymentsRepository.bounceSaleCheck(saleId, actorOf(currentUserId, currentUserName, currentUserRole), notes);
 
 /**
  * Satış kalemlerini düzenler (muhasebe "Miktarları Düzenle" akışı).

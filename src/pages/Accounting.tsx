@@ -1,9 +1,12 @@
-// Takip Sistemi - Muhasebeci Modülü (Accounting)
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { getSales, processApproval, updateSale } from "../services/db";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { formatCurrency, formatDate, formatDateTime } from "../utils/format";
+import { PAYMENT_METHOD_LABELS } from "../utils/salesMath";
 import Modal from "../components/Modal";
+import EmptyState from "../components/EmptyState";
+import { SkeletonTable } from "../components/Skeleton";
 import {
   Check,
   X,
@@ -13,12 +16,17 @@ import {
   XCircle,
   Clock,
   Database,
-  Eye,
   Download,
-  Rows3
+  Rows3,
+  CheckSquare,
+  Calendar,
+  Search,
+  CheckCheck
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import type { Sale, SaleItem } from "../types";
+
+type DateFilterType = "all" | "today" | "week" | "month" | "custom";
 
 const Accounting = () => {
   const { user } = useAuth();
@@ -37,9 +45,21 @@ const Accounting = () => {
     localStorage.setItem("takip_accounting_compact", next ? "true" : "false");
   };
 
-  // Sorting States
+  // Filtreleme & Arama States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
+  // Sıralama States
   const [sortField, setSortField] = useState<string>("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Toplu Onay States
+  const [selectedSaleIds, setSelectedSaleIds] = useState<string[]>([]);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchMicroProcessed, setBatchMicroProcessed] = useState(false);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
 
   // Detay & Onay Modalı States
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -54,9 +74,26 @@ const Accounting = () => {
   const [editableItems, setEditableItems] = useState<SaleItem[]>([]);
   const [discountAmount, setDiscountAmount] = useState(0);
 
+  const fetchSalesData = useCallback(async () => {
+    try {
+      const salesData = await getSales();
+      setSales(salesData);
+    } catch (err) {
+      console.error("Satışlar yüklenirken hata:", err);
+      showToast("Satış verileri yüklenemedi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
   useEffect(() => {
     fetchSalesData();
-  }, []);
+  }, [fetchSalesData]);
+
+  // Sekme değiştiğinde çoklu seçimleri temizle
+  useEffect(() => {
+    setSelectedSaleIds([]);
+  }, [activeTab]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -67,7 +104,51 @@ const Accounting = () => {
     }
   };
 
-  const getSortedData = (dataList: Sale[]): Sale[] => {
+  // Tarih ve Arama Filtresi Kontrolü
+  const matchesFilter = useCallback((sale: Sale): boolean => {
+    // Arama Filtresi
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matchReceipt = sale.receiptNo?.toLowerCase().includes(q);
+      const matchCompany = sale.customerCompany?.toLowerCase().includes(q);
+      const matchCustomer = sale.customerName?.toLowerCase().includes(q);
+      const matchSalesperson = sale.salespersonName?.toLowerCase().includes(q);
+      if (!matchReceipt && !matchCompany && !matchCustomer && !matchSalesperson) return false;
+    }
+
+    // Tarih Filtresi
+    if (dateFilter === "all") return true;
+
+    const saleDate = new Date(sale.date);
+    const now = new Date();
+
+    if (dateFilter === "today") {
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return saleDate >= startOfToday;
+    }
+
+    if (dateFilter === "week") {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return saleDate >= weekAgo;
+    }
+
+    if (dateFilter === "month") {
+      const monthAgo = new Date();
+      monthAgo.setDate(monthAgo.getDate() - 30);
+      return saleDate >= monthAgo;
+    }
+
+    if (dateFilter === "custom") {
+      if (customStartDate && saleDate < new Date(`${customStartDate}T00:00:00`)) return false;
+      if (customEndDate && saleDate > new Date(`${customEndDate}T23:59:59`)) return false;
+      return true;
+    }
+
+    return true;
+  }, [searchQuery, dateFilter, customStartDate, customEndDate]);
+
+  const getSortedData = useCallback((dataList: Sale[]): Sale[] => {
     return [...dataList].sort((a, b) => {
       let aVal: any = (a as any)[sortField];
       let bVal: any = (b as any)[sortField];
@@ -82,48 +163,81 @@ const Accounting = () => {
         return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
       }
     });
-  };
+  }, [sortField, sortOrder]);
 
-  const fetchSalesData = async () => {
-    try {
-      const salesData = await getSales();
-      setSales(salesData);
-    } catch (err) {
-      console.error("Satışlar yüklenirken hata:", err);
-    } finally {
-      setLoading(false);
+  // Bekleyen ve Arşivlenen Satışlar
+  const pendingSales = useMemo(() => {
+    const filtered = sales.filter(s => s.status === "pending_accounting" && matchesFilter(s));
+    return getSortedData(filtered);
+  }, [sales, matchesFilter, getSortedData]);
+
+  const archivedSales = useMemo(() => {
+    const filtered = sales.filter(s => (s.status === "approved" || s.status === "rejected") && matchesFilter(s));
+    return getSortedData(filtered);
+  }, [sales, matchesFilter, getSortedData]);
+
+  // Çoklu Seçim Mantığı
+  const handleToggleSelectAll = () => {
+    if (selectedSaleIds.length === pendingSales.length && pendingSales.length > 0) {
+      setSelectedSaleIds([]);
+    } else {
+      setSelectedSaleIds(pendingSales.map(s => s.id));
     }
   };
 
-  if (loading) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
-        <div style={{ display: "flex", gap: "2rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.75rem" }}>
-          <div className="skeleton" style={{ width: "160px", height: "24px" }} />
-          <div className="skeleton" style={{ width: "180px", height: "24px" }} />
-        </div>
-        <section className="card" style={{ padding: "1.5rem" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1.5fr 1fr 1fr 1fr", gap: "1rem", alignItems: "center", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-color)" }}>
-                <div className="skeleton" style={{ height: "18px", width: "80%" }} />
-                <div className="skeleton" style={{ height: "18px", width: "90%" }} />
-                <div className="skeleton" style={{ height: "18px", width: "70%" }} />
-                <div className="skeleton" style={{ height: "18px", width: "60%" }} />
-                <div className="skeleton" style={{ height: "24px", width: "80px", borderRadius: "12px" }} />
-                <div className="skeleton" style={{ height: "30px", width: "60px", borderRadius: "6px" }} />
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedSaleIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
-  }
+  };
 
-  // Bekleyen ve Onaylananlar
-  const pendingSales = getSortedData(sales.filter(s => s.status === "pending_accounting"));
-  const archivedSales = getSortedData(sales.filter(s => s.status === "approved" || s.status === "rejected"));
+  // Seçilen satışların toplam tutarı
+  const selectedSalesList = useMemo(() => {
+    return pendingSales.filter(s => selectedSaleIds.includes(s.id));
+  }, [pendingSales, selectedSaleIds]);
 
+  const totalSelectedAmount = useMemo(() => {
+    return selectedSalesList.reduce((sum, s) => sum + (s.netAmount || 0), 0);
+  }, [selectedSalesList]);
+
+  // Toplu Onaylama İşi
+  const handleBatchApproveSubmit = async () => {
+    if (selectedSaleIds.length === 0 || !user) return;
+    setBatchSubmitting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const saleId of selectedSaleIds) {
+      try {
+        await processApproval(
+          saleId,
+          "approved",
+          "Toplu onay işlemi",
+          batchMicroProcessed,
+          user.uid,
+          user.displayName,
+          user.role
+        );
+        successCount++;
+      } catch (err) {
+        console.error(`Satış ${saleId} onaylanırken hata:`, err);
+        failCount++;
+      }
+    }
+
+    if (failCount === 0) {
+      showToast(`${successCount} adet satış kaydı başarıyla toplu onaylandı.`, "success");
+    } else {
+      showToast(`${successCount} satış onaylandı, ${failCount} satışta hata oluştu.`, "warning");
+    }
+
+    setSelectedSaleIds([]);
+    setShowBatchModal(false);
+    setBatchSubmitting(false);
+    fetchSalesData();
+  };
+
+  // Tekil İnceleme Modalı
   const handleOpenReview = (sale: Sale) => {
     setSelectedSale(sale);
     setIsMicroProcessed(sale.accountingProcessed || false);
@@ -139,7 +253,7 @@ const Accounting = () => {
     setShowReviewModal(true);
   };
 
-  // --- KALEM DÜZENLEME İŞLEMLERİ ---
+  // Kalem Düzenleme İşlemleri
   const handleItemQtyChange = (idx: number, newQty: string) => {
     const updated = [...editableItems];
     const qty = Math.max(1, parseInt(newQty, 10) || 1);
@@ -151,7 +265,6 @@ const Accounting = () => {
   const handleSaveEditedSale = async () => {
     if (!selectedSale || !user) return;
 
-    // Fiyat ve KDV toplamlarını yeniden hesapla
     const totalAmount = editableItems.reduce((sum, item) => sum + item.total, 0);
     const taxAmount = editableItems.reduce((sum, item) => sum + (item.total * (item.taxRate / 100)), 0);
     const discount = discountAmount || 0;
@@ -166,24 +279,23 @@ const Accounting = () => {
     };
 
     try {
-      await updateSale(selectedSale.id, updatedSaleFields, user.uid, user.displayName, user.role);
-      showToast("Satış kaydı başarıyla güncellendi.", "success");
+      await updateSale(
+        selectedSale.id,
+        updatedSaleFields,
+        user.uid,
+        user.displayName,
+        user.role
+      );
 
-      // Lokal nesneyi de güncelle ki modalda tutarlar doğru görünsün
-      setSelectedSale({
-        ...selectedSale,
-        ...updatedSaleFields
-      });
+      setSelectedSale({ ...selectedSale, ...updatedSaleFields });
       setIsEditMode(false);
-
-      // Satış listesini tazele
+      showToast("Satış kalemleri güncellendi.", "success");
       fetchSalesData();
     } catch (err: any) {
-      showToast("Düzenleme kaydedilirken hata: " + err.message, "error");
+      showToast("Güncelleme hatası: " + err.message, "error");
     }
   };
 
-  // --- ONAYLAMA / REDDETME ---
   const handleApprove = async () => {
     if (!selectedSale || !user) return;
 
@@ -191,7 +303,7 @@ const Accounting = () => {
       await processApproval(
         selectedSale.id,
         "approved",
-        approvalNotes || "Muhasebe tarafından onaylandı.",
+        approvalNotes,
         isMicroProcessed,
         user.uid,
         user.displayName,
@@ -218,7 +330,7 @@ const Accounting = () => {
         selectedSale.id,
         "rejected",
         rejectReason,
-        false, // Reddedilen kayıt Mikro'ya girilmez
+        false,
         user.uid,
         user.displayName,
         user.role
@@ -265,228 +377,512 @@ const Accounting = () => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
 
-      {/* Tab Kontrolü ve Kompakt Görünüm Butonu */}
+      {/* Üst Sekmeler, Arama ve Filtre Çubuğu */}
       <div style={{
         display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        borderBottom: "1px solid var(--border-color)",
-        flexWrap: "wrap",
+        flexDirection: "column",
         gap: "1rem",
-        paddingBottom: "0.25rem"
+        borderBottom: "1px solid var(--border-color)",
+        paddingBottom: "1rem"
       }}>
-        <div style={{ display: "flex", gap: "2rem" }}>
-          <button
-            onClick={() => setActiveTab("pending")}
-            style={{
-              fontSize: "1rem",
-              fontWeight: activeTab === "pending" ? 600 : 500,
-              color: activeTab === "pending" ? "var(--primary)" : "var(--text-secondary)",
-              borderBottom: activeTab === "pending" ? "2px solid var(--primary)" : "2px solid transparent",
-              paddingBottom: "0.75rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem"
-            }}
-          >
-            <Clock size={18} />
-            <span>Bekleyen Onaylar</span>
-            <span className="badge badge-warning" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
-              {pendingSales.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab("archive")}
-            style={{
-              fontSize: "1rem",
-              fontWeight: activeTab === "archive" ? 600 : 500,
-              color: activeTab === "archive" ? "var(--primary)" : "var(--text-secondary)",
-              borderBottom: activeTab === "archive" ? "2px solid var(--primary)" : "2px solid transparent",
-              paddingBottom: "0.75rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem"
-            }}
-          >
-            <Database size={18} />
-            <span>Arşivlenmiş Kayıtlar</span>
-            <span className="badge badge-primary" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
-              {archivedSales.length}
-            </span>
-          </button>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "1rem"
+        }}>
+          <div style={{ display: "flex", gap: "1.5rem" }}>
+            <button
+              onClick={() => setActiveTab("pending")}
+              style={{
+                fontSize: "1rem",
+                fontWeight: activeTab === "pending" ? 600 : 500,
+                color: activeTab === "pending" ? "var(--primary)" : "var(--text-secondary)",
+                borderBottom: activeTab === "pending" ? "2px solid var(--primary)" : "2px solid transparent",
+                paddingBottom: "0.5rem",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none"
+              }}
+            >
+              <Clock size={18} />
+              <span>Bekleyen Onaylar</span>
+              <span className="badge badge-warning" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
+                {pendingSales.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("archive")}
+              style={{
+                fontSize: "1rem",
+                fontWeight: activeTab === "archive" ? 600 : 500,
+                color: activeTab === "archive" ? "var(--primary)" : "var(--text-secondary)",
+                borderBottom: activeTab === "archive" ? "2px solid var(--primary)" : "2px solid transparent",
+                paddingBottom: "0.5rem",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                background: "none",
+                borderTop: "none",
+                borderLeft: "none",
+                borderRight: "none"
+              }}
+            >
+              <Database size={18} />
+              <span>Arşivlenmiş Kayıtlar</span>
+              <span className="badge badge-primary" style={{ fontSize: "0.7rem", marginLeft: "0.25rem" }}>
+                {archivedSales.length}
+              </span>
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <button
+              type="button"
+              className={`btn btn-secondary btn-sm ${isCompact ? "btn-primary" : ""}`}
+              onClick={toggleCompact}
+              title={isCompact ? "Standart satır aralığına geç" : "Daha fazla satır görmek için aralıkları daralt"}
+            >
+              <Rows3 size={16} />
+              <span>{isCompact ? "Kompakt Tablo" : "Normal Tablo"}</span>
+            </button>
+          </div>
         </div>
 
-        <button
-          type="button"
-          className={`btn btn-secondary btn-sm ${isCompact ? "btn-primary" : ""}`}
-          onClick={toggleCompact}
-          title={isCompact ? "Standart satır aralığına geç" : "Daha fazla satır görmek için aralıkları daralt"}
-          style={{ marginBottom: "0.5rem" }}
-        >
-          <Rows3 size={16} />
-          <span>{isCompact ? "Kompakt Tablo" : "Normal Tablo"}</span>
-        </button>
+        {/* Arama ve Tarih Filtreleme Çubuğu */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+          <div style={{ position: "relative", minWidth: "260px", flex: 1, maxWidth: "420px" }}>
+            <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
+              <Search size={16} />
+            </span>
+            <input
+              type="text"
+              className="form-control"
+              style={{ paddingLeft: "2.25rem", height: "36px", fontSize: "0.85rem" }}
+              placeholder="Fiş no, müşteri, firma veya satışçı ara..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+              <Calendar size={14} /> Tarih:
+            </span>
+            {(["all", "today", "week", "month", "custom"] as DateFilterType[]).map((f) => {
+              const labels: Record<DateFilterType, string> = {
+                all: "Tümü",
+                today: "Bugün",
+                week: "Bu Hafta",
+                month: "Bu Ay",
+                custom: "Özel Tarih"
+              };
+              const isActive = dateFilter === f;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setDateFilter(f)}
+                  className={`btn btn-sm ${isActive ? "btn-primary" : "btn-secondary"}`}
+                  style={{ padding: "0.25rem 0.6rem", fontSize: "0.78rem" }}
+                >
+                  {labels[f]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Özel Tarih Aralığı Seçim Kutusu */}
+        {dateFilter === "custom" && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.75rem 1rem",
+            backgroundColor: "var(--bg-tertiary)",
+            borderRadius: "var(--radius-sm)",
+            flexWrap: "wrap"
+          }} className="animate-slide-up">
+            <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+              Aralık Belirleyin:
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Başlangıç:</span>
+              <input
+                type="date"
+                className="form-control"
+                style={{ width: "140px", padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
+                value={customStartDate}
+                onChange={e => setCustomStartDate(e.target.value)}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Bitiş:</span>
+              <input
+                type="date"
+                className="form-control"
+                style={{ width: "140px", padding: "0.25rem 0.5rem", fontSize: "0.8rem" }}
+                value={customEndDate}
+                onChange={e => setCustomEndDate(e.target.value)}
+              />
+            </div>
+            {(customStartDate || customEndDate) && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ padding: "0.2rem 0.5rem", fontSize: "0.75rem" }}
+                onClick={() => { setCustomStartDate(""); setCustomEndDate(""); }}
+              >
+                Tarihleri Temizle
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* TOPLU ONAY EYLEM ÇUBUĞU (Bekleyen sekmesinde seçim yapıldığında görünür) */}
+      {activeTab === "pending" && selectedSaleIds.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "0.85rem 1.25rem",
+            backgroundColor: "rgba(99, 102, 241, 0.08)",
+            border: "1px solid rgba(99, 102, 241, 0.25)",
+            borderRadius: "var(--radius-md)",
+            flexWrap: "wrap",
+            gap: "0.75rem"
+          }}
+          className="animate-slide-up"
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <CheckSquare size={20} color="var(--primary)" />
+            <span style={{ fontWeight: 600, fontSize: "0.92rem", color: "var(--text-primary)" }}>
+              <strong>{selectedSaleIds.length}</strong> adet satış seçildi
+            </span>
+            <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              (Toplam Tutar: <strong style={{ color: "var(--primary)" }}>{formatCurrency(totalSelectedAmount)}</strong>)
+            </span>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setSelectedSaleIds([])}
+            >
+              Seçimi Kaldır
+            </button>
+            <button
+              type="button"
+              className="btn btn-success btn-sm"
+              style={{ gap: "0.35rem", padding: "0.4rem 0.8rem", fontWeight: 600 }}
+              onClick={() => setShowBatchModal(true)}
+            >
+              <CheckCheck size={16} />
+              <span>Seçilenleri Toplu Onayla</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* İÇERİK TABLOSU */}
       <section className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
-          <table className={`table ${isCompact ? "table-compact" : ""}`}>
-            <thead>
-              <tr>
-                <th onClick={() => handleSort("receiptNo")} style={{ cursor: "pointer" }}>
-                  Fiş No / Tarih {sortField === "receiptNo" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
-                </th>
-                <th onClick={() => handleSort("customerCompany")} style={{ cursor: "pointer" }}>
-                  Müşteri / Firma {sortField === "customerCompany" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
-                </th>
-                <th onClick={() => handleSort("salespersonName")} style={{ cursor: "pointer" }}>
-                  Satış Temsilcisi {sortField === "salespersonName" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
-                </th>
-                <th onClick={() => handleSort("netAmount")} style={{ textAlign: "right", cursor: "pointer" }}>
-                  Tutar {sortField === "netAmount" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
-                </th>
-                {activeTab === "archive" && <th>Mikro Entegrasyonu</th>}
-                <th style={{ textAlign: "center" }}>Durum</th>
-                <th style={{ width: "100px" }}>İşlem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeTab === "pending" ? (
-                /* --- BEKLEYEN SATIŞLAR TABLOSU --- */
-                pendingSales.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ padding: 0 }}>
-                      <div style={{ textAlign: "center", padding: "3.5rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
-                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "var(--success-light)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--success)" }}>
-                          <CheckCircle2 size={24} />
-                        </div>
-                        <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Onay Bekleyen Sipariş Yok</div>
-                        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", maxWidth: "360px", margin: 0 }}>
-                          Tüm satış kayıtları muhasebe tarafından işlenmiş veya onaylanmıştır.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  pendingSales.map((sale) => (
-                    <tr key={sale.id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{sale.receiptNo}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                          {new Date(sale.date).toLocaleDateString('tr-TR')} {new Date(sale.date).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{sale.customerCompany}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{sale.customerName}</div>
-                      </td>
-                      <td>{sale.salespersonName}</td>
-                      <td style={{ textAlign: "right", fontWeight: 700, color: "var(--text-primary)" }}>
-                        {sale.netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <span className="badge badge-warning" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                          <Clock size={12} />
-                          <span>Onay Bekliyor</span>
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          onClick={() => handleOpenReview(sale)}
-                          className="btn btn-primary btn-sm"
-                          style={{ gap: "0.35rem" }}
-                        >
-                          <FileSearch size={14} />
-                          <span>İncele</span>
-                        </button>
+        {loading ? (
+          <div style={{ padding: "1.5rem" }}>
+            <SkeletonTable rows={6} columns={6} />
+          </div>
+        ) : (
+          <div className="table-container" style={{ border: "none", borderRadius: 0 }}>
+            <table className={`table ${isCompact ? "table-compact" : ""}`}>
+              <thead>
+                <tr>
+                  {activeTab === "pending" && (
+                    <th style={{ width: "40px", textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={pendingSales.length > 0 && selectedSaleIds.length === pendingSales.length}
+                        onChange={handleToggleSelectAll}
+                        style={{ cursor: "pointer", width: "15px", height: "15px" }}
+                        title="Tümünü Seç / Seçimi Kaldır"
+                      />
+                    </th>
+                  )}
+                  <th onClick={() => handleSort("receiptNo")} style={{ cursor: "pointer" }}>
+                    Fiş No / Tarih {sortField === "receiptNo" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                  <th onClick={() => handleSort("customerCompany")} style={{ cursor: "pointer" }}>
+                    Müşteri / Firma {sortField === "customerCompany" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                  <th onClick={() => handleSort("salespersonName")} style={{ cursor: "pointer" }}>
+                    Satış Temsilcisi {sortField === "salespersonName" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                  <th onClick={() => handleSort("netAmount")} style={{ textAlign: "right", cursor: "pointer" }}>
+                    Tutar {sortField === "netAmount" ? (sortOrder === "asc" ? " ▲" : " ▼") : ""}
+                  </th>
+                  {activeTab === "archive" && <th>Mikro Entegrasyonu</th>}
+                  <th style={{ textAlign: "center" }}>Durum</th>
+                  <th style={{ width: "100px", textAlign: "center" }}>İşlem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeTab === "pending" ? (
+                  /* --- BEKLEYEN SATIŞLAR TABLOSU --- */
+                  pendingSales.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: 0 }}>
+                        <EmptyState
+                          icon={CheckCircle2}
+                          title="Onay Bekleyen Sipariş Yok"
+                          description="Tüm satış kayıtları muhasebe tarafından işlenmiş veya onaylanmıştır."
+                        />
                       </td>
                     </tr>
-                  ))
-                )
-              ) : (
-                /* --- ARŞİVLENMİŞ SATIŞLAR TABLOSU --- */
-                archivedSales.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ padding: 0 }}>
-                      <div style={{ textAlign: "center", padding: "3.5rem 1rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
-                        <div style={{ width: "48px", height: "48px", borderRadius: "50%", backgroundColor: "var(--bg-tertiary)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>
-                          <FileSearch size={24} />
-                        </div>
-                        <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Arşivde Kayıt Bulunmuyor</div>
-                        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", maxWidth: "360px", margin: 0 }}>
-                          Henüz onaylanan veya reddedilen bir satış kaydı arşivlenmedi.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
+                  ) : (
+                    pendingSales.map((sale) => {
+                      const isSelected = selectedSaleIds.includes(sale.id);
+                      return (
+                        <tr
+                          key={sale.id}
+                          style={{
+                            backgroundColor: isSelected ? "rgba(99, 102, 241, 0.04)" : undefined
+                          }}
+                        >
+                          <td style={{ textAlign: "center" }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectRow(sale.id)}
+                              style={{ cursor: "pointer", width: "15px", height: "15px" }}
+                            />
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{sale.receiptNo}</div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                              {formatDateTime(sale.date)}
+                            </div>
+                            {sale.paymentMethod && (
+                              <span className="badge badge-secondary" style={{ fontSize: "0.68rem", marginTop: "0.2rem" }}>
+                                {PAYMENT_METHOD_LABELS[sale.paymentMethod]}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{sale.customerCompany}</div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{sale.customerName}</div>
+                          </td>
+                          <td>{sale.salespersonName}</td>
+                          <td style={{ textAlign: "right", fontWeight: 700, color: "var(--text-primary)" }}>
+                            {formatCurrency(sale.netAmount)}
+                          </td>
+                          <td style={{ textAlign: "center" }}>
+                            <span className="badge badge-warning" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                              <Clock size={12} />
+                              <span>Onay Bekliyor</span>
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "center" }}>
+                            <button
+                              onClick={() => handleOpenReview(sale)}
+                              className="btn btn-primary btn-sm"
+                              style={{ gap: "0.35rem" }}
+                            >
+                              <FileSearch size={14} />
+                              <span>İncele</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )
                 ) : (
-                  archivedSales.map((sale) => (
-                    <tr key={sale.id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{sale.receiptNo}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                          {new Date(sale.date).toLocaleDateString('tr-TR')}
-                        </div>
+                  /* --- ARŞİVLENMİŞ SATIŞLAR TABLOSU --- */
+                  archivedSales.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: 0 }}>
+                        <EmptyState
+                          icon={Database}
+                          title="Arşivde Kayıt Bulunmuyor"
+                          description="Belirtilen kriterlere uygun onaylanmış veya reddedilmiş bir satış kaydı bulunamadı."
+                        />
                       </td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{sale.customerCompany}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{sale.customerName}</div>
-                      </td>
-                      <td>{sale.salespersonName}</td>
-                      <td style={{ textAlign: "right", fontWeight: 700 }}>
-                        {sale.netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
-                      </td>
-                      <td>
-                        {sale.status === "approved" ? (
-                          <span style={{
-                            fontSize: "0.85rem",
-                            fontWeight: 500,
-                            color: sale.accountingProcessed ? "var(--success)" : "var(--danger)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.25rem"
-                          }}>
-                            {sale.accountingProcessed ? "✓ Mikro'ya İşlendi" : "✗ Mikro'ya İşlenmedi"}
+                    </tr>
+                  ) : (
+                    archivedSales.map((sale) => (
+                      <tr key={sale.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{sale.receiptNo}</div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            {formatDate(sale.date)}
+                          </div>
+                          {sale.paymentMethod && (
+                            <span className="badge badge-secondary" style={{ fontSize: "0.68rem", marginTop: "0.2rem" }}>
+                              {PAYMENT_METHOD_LABELS[sale.paymentMethod]}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{sale.customerCompany}</div>
+                          <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{sale.customerName}</div>
+                        </td>
+                        <td>{sale.salespersonName}</td>
+                        <td style={{ textAlign: "right", fontWeight: 700 }}>
+                          {formatCurrency(sale.netAmount)}
+                        </td>
+                        <td>
+                          {sale.status === "approved" ? (
+                            <span style={{
+                              fontSize: "0.85rem",
+                              fontWeight: 500,
+                              color: sale.accountingProcessed ? "var(--success)" : "var(--danger)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.25rem"
+                            }}>
+                              {sale.accountingProcessed ? "✓ Mikro'ya İşlendi" : "✗ Mikro'ya İşlenmedi"}
+                            </span>
+                          ) : "-"}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className={`badge badge-${sale.status === "approved" ? "success" : "danger"}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                            {sale.status === "approved" ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                            <span>{sale.status === "approved" ? "Onaylandı" : "Reddedildi"}</span>
                           </span>
-                        ) : "-"}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <span className={`badge badge-${sale.status === "approved" ? "success" : "danger"}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                          {sale.status === "approved" ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
-                          <span>{sale.status === "approved" ? "Onaylandı" : "Reddedildi"}</span>
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          onClick={() => handleOpenReview(sale)}
-                          className="btn btn-secondary btn-sm"
-                          style={{ gap: "0.25rem", padding: "0.35rem 0.65rem" }}
-                        >
-                          <Eye size={14} />
-                          <span>Görüntüle</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ))}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <button
+                            onClick={() => handleOpenReview(sale)}
+                            className="btn btn-secondary btn-sm"
+                            style={{ gap: "0.35rem" }}
+                          >
+                            <FileSearch size={14} />
+                            <span>Detay</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
-      {/* --- DETAYLI İNCELEME & ONAY MODALI --- */}
-      {selectedSale && (
+      {/* TOPLU SATIŞ ONAY MODALI */}
+      {showBatchModal && (
+        <Modal
+          isOpen={showBatchModal}
+          onClose={() => !batchSubmitting && setShowBatchModal(false)}
+          maxWidth="520px"
+          title="Toplu Satış Onayı"
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowBatchModal(false)}
+                disabled={batchSubmitting}
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                className="btn btn-success"
+                onClick={handleBatchApproveSubmit}
+                disabled={batchSubmitting}
+              >
+                <CheckCheck size={16} />
+                <span>{batchSubmitting ? "Onaylanıyor..." : `Evet, ${selectedSaleIds.length} Satışı Onayla`}</span>
+              </button>
+            </>
+          }
+        >
+          <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              padding: "1rem",
+              borderRadius: "var(--radius-sm)",
+              backgroundColor: "rgba(16, 185, 129, 0.08)",
+              border: "1px solid rgba(16, 185, 129, 0.2)"
+            }}>
+              <CheckCheck size={28} color="var(--success)" style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                  {selectedSaleIds.length} adet bekleyen satış onaylanacak
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.2rem" }}>
+                  Toplam Onay Tutarı: <strong>{formatCurrency(totalSelectedAmount)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ maxHeight: "160px", overflowY: "auto", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", padding: "0.5rem" }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, marginBottom: "0.35rem" }}>
+                ONAYLANACAK FİŞLER:
+              </div>
+              {selectedSalesList.map(s => (
+                <div key={s.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", padding: "0.25rem 0", borderBottom: "1px solid var(--border-color)" }}>
+                  <span><strong>{s.receiptNo}</strong> - {s.customerCompany}</span>
+                  <span style={{ fontWeight: 600 }}>{formatCurrency(s.netAmount)}</span>
+                </div>
+              ))}
+            </div>
+
+            <label style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              padding: "0.85rem 1rem",
+              borderRadius: "var(--radius-sm)",
+              backgroundColor: "var(--bg-tertiary)",
+              border: "1px solid var(--border-color)",
+              cursor: "pointer",
+              fontSize: "0.9rem"
+            }}>
+              <input
+                type="checkbox"
+                style={{ width: "16px", height: "16px" }}
+                checked={batchMicroProcessed}
+                onChange={e => setBatchMicroProcessed(e.target.checked)}
+              />
+              <div>
+                <strong>Mikro Muhasebe programına işlendi</strong>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                  Tüm bu satışların Mikro sistemine aktarımı tamamlandıysa işaretleyin.
+                </div>
+              </div>
+            </label>
+          </div>
+        </Modal>
+      )}
+
+      {/* TEKİL İNCELEME & ONAY MODALI */}
+      {showReviewModal && selectedSale && (
         <Modal
           isOpen={showReviewModal}
           onClose={() => setShowReviewModal(false)}
-          title={`Satış Detayı ve İşlemleri - ${selectedSale.receiptNo}`}
-          maxWidth="680px"
+          maxWidth="760px"
+          title={`Satış Detayı & Onay [${selectedSale.receiptNo}]`}
           footer={
             <>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowReviewModal(false)}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowReviewModal(false)}
+              >
                 Kapat
               </button>
 
@@ -496,6 +892,7 @@ const Accounting = () => {
                     type="button"
                     className="btn btn-danger"
                     onClick={() => setShowRejectForm(true)}
+                    disabled={isEditMode}
                   >
                     <X size={16} />
                     <span>Reddet</span>
@@ -525,10 +922,14 @@ const Accounting = () => {
               <div>
                 <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600 }}>BİLGİLER</div>
                 <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
-                  <strong>Tarih:</strong> {new Date(selectedSale.date).toLocaleString('tr-TR')}
+                  <strong>Tarih:</strong> {formatDateTime(selectedSale.date)}
                 </div>
                 <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                   <strong>Satıcı:</strong> {selectedSale.salespersonName}
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+                  <strong>Ödeme Şekli:</strong> <span className="badge badge-primary" style={{ fontSize: "0.72rem" }}>{PAYMENT_METHOD_LABELS[selectedSale.paymentMethod || "open_account"]}</span>
+                  {selectedSale.checkNumber ? ` (Çek No: ${selectedSale.checkNumber})` : ""}
                 </div>
               </div>
             </div>
@@ -543,7 +944,6 @@ const Accounting = () => {
                     className="btn btn-secondary btn-sm"
                     onClick={() => {
                       if (isEditMode) {
-                        // Değişiklikleri iptal et ve çık
                         setEditableItems(JSON.parse(JSON.stringify(selectedSale.items || [])));
                         setDiscountAmount(selectedSale.discountAmount || 0);
                       }
@@ -576,7 +976,7 @@ const Accounting = () => {
                             <span style={{ fontWeight: 600 }}>{item.productName}</span>
                             <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{item.productCode}</div>
                           </td>
-                          <td style={{ textAlign: "right" }}>{item.price.toFixed(2)} ₺</td>
+                          <td style={{ textAlign: "right" }}>{formatCurrency(item.price)}</td>
                           <td style={{ textAlign: "center" }}>
                             <input
                               type="number"
@@ -587,7 +987,7 @@ const Accounting = () => {
                               onChange={(e) => handleItemQtyChange(idx, e.target.value)}
                             />
                           </td>
-                          <td style={{ textAlign: "right", fontWeight: 600 }}>{item.total.toFixed(2)} ₺</td>
+                          <td style={{ textAlign: "right", fontWeight: 600 }}>{formatCurrency(item.total)}</td>
                         </tr>
                       ))
                     ) : (
@@ -598,9 +998,9 @@ const Accounting = () => {
                             <span style={{ fontWeight: 600 }}>{item.productName}</span>
                             <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{item.productCode}</div>
                           </td>
-                          <td style={{ textAlign: "right" }}>{item.price.toFixed(2)} ₺</td>
+                          <td style={{ textAlign: "right" }}>{formatCurrency(item.price)}</td>
                           <td style={{ textAlign: "center", fontWeight: 600 }}>{item.quantity}</td>
-                          <td style={{ textAlign: "right", fontWeight: 600 }}>{item.total.toFixed(2)} ₺</td>
+                          <td style={{ textAlign: "right", fontWeight: 600 }}>{formatCurrency(item.total)}</td>
                         </tr>
                       ))
                     )}
@@ -645,13 +1045,13 @@ const Accounting = () => {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "0.85rem", textAlign: "right" }}>
-                <div>Ara Toplam: {selectedSale.totalAmount.toFixed(2)} ₺</div>
-                <div>KDV (%20): {selectedSale.taxAmount.toFixed(2)} ₺</div>
+                <div>Ara Toplam: {formatCurrency(selectedSale.totalAmount)}</div>
+                <div>KDV (%20): {formatCurrency(selectedSale.taxAmount)}</div>
                 {selectedSale.discountAmount > 0 && (
-                  <div style={{ color: "var(--danger)" }}>İndirim: -{selectedSale.discountAmount.toFixed(2)} ₺</div>
+                  <div style={{ color: "var(--danger)" }}>İndirim: -{formatCurrency(selectedSale.discountAmount)}</div>
                 )}
                 <div style={{ fontSize: "1.1rem", fontWeight: 700, marginTop: "0.25rem", color: "var(--primary)" }}>
-                  Net Tutar: {selectedSale.netAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+                  Net Tutar: {formatCurrency(selectedSale.netAmount)}
                 </div>
               </div>
             </div>
@@ -735,7 +1135,7 @@ const Accounting = () => {
                 <strong>İşlem Geçmişi:</strong>
                 <div style={{ marginTop: "0.5rem", padding: "0.75rem", borderRadius: "var(--radius-sm)", backgroundColor: "var(--bg-tertiary)" }}>
                   <div><strong>İşlem Yapan:</strong> {selectedSale.processedBy || "Sistem"}</div>
-                  <div><strong>İşlem Zamanı:</strong> {selectedSale.processedAt ? new Date(selectedSale.processedAt).toLocaleString('tr-TR') : "-"}</div>
+                  <div><strong>İşlem Zamanı:</strong> {selectedSale.processedAt ? formatDateTime(selectedSale.processedAt) : "-"}</div>
                   <div><strong>Mikro Entegrasyonu:</strong> {selectedSale.accountingProcessed ? "✓ Mikro sistemine girildi" : "✗ Mikro sistemine girilmedi"}</div>
                 </div>
               </div>
