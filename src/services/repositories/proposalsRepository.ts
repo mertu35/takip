@@ -69,15 +69,9 @@ export const computeProposalTotals = (items: ProposalItem[], discount: number = 
 };
 
 const firebaseProposalsRepository: ProposalsRepository = {
-  async getAll(role, userId) {
+  async getAll() {
     const col = collection(firestore!, "proposals");
-    let q;
-
-    if (role === "sales" && userId) {
-      q = query(col, where("salespersonId", "==", userId), orderBy("createdAt", "desc"));
-    } else {
-      q = query(col, orderBy("createdAt", "desc"));
-    }
+    const q = query(col, orderBy("createdAt", "desc"));
 
     try {
       const snap = await getDocs(q);
@@ -209,11 +203,8 @@ const firebaseProposalsRepository: ProposalsRepository = {
 };
 
 const mockProposalsRepository: ProposalsRepository = {
-  async getAll(role, userId) {
+  async getAll() {
     const list = getLocalData<Proposal>("takip_proposals");
-    if (role === "sales" && userId) {
-      return list.filter((p) => p.salespersonId === userId);
-    }
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
