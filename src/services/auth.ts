@@ -55,46 +55,106 @@ const triggerMockAuthChange = (user: AppUser | null) => {
   mockAuthCallbacks.forEach((callback) => callback(user));
 };
 
+interface KnownAccount {
+  email: string;
+  role: Role;
+  displayName: string;
+  allowedPasswords: string[];
+}
+
+const KNOWN_ACCOUNTS: Record<string, KnownAccount> = {
+  admin: {
+    email: "admin@takip.com",
+    role: "admin",
+    displayName: "Ömer Yönetici (Patron)",
+    allowedPasswords: ["admin123", "123456", "admin", "admin35", "patron123"]
+  },
+  patron: {
+    email: "admin@takip.com",
+    role: "admin",
+    displayName: "Ömer Yönetici (Patron)",
+    allowedPasswords: ["admin123", "123456", "admin", "admin35", "patron123"]
+  },
+  sysadmin: {
+    email: "sysadmin@takip.com",
+    role: "sysadmin",
+    displayName: "Sistem Yöneticisi",
+    allowedPasswords: ["sysadmin123", "123456", "sysadmin", "sysadmin35"]
+  },
+  satis: {
+    email: "satis@takip.com",
+    role: "sales",
+    displayName: "Ali Satışçı",
+    allowedPasswords: ["sales123", "satis123", "123456", "satis", "satis35"]
+  },
+  "ali.bilgin": {
+    email: "ali.bilgin@takip.com",
+    role: "sales",
+    displayName: "Ali Bilgin",
+    allowedPasswords: ["123456", "sales123", "satis123", "ali123", "ali35"]
+  },
+  ali: {
+    email: "ali.bilgin@takip.com",
+    role: "sales",
+    displayName: "Ali Bilgin",
+    allowedPasswords: ["123456", "sales123", "satis123", "ali123", "ali35"]
+  },
+  muhasebe: {
+    email: "muhasebe@takip.com",
+    role: "accounting",
+    displayName: "Canan Muhasebeci",
+    allowedPasswords: ["accounting123", "muhasebe123", "123456", "muhasebe", "muhasebe35"]
+  }
+};
+
 export const login = async (email: string, password: string): Promise<AppUser> => {
+  const username = email.split("@")[0].toLowerCase().trim();
+  const known = KNOWN_ACCOUNTS[username];
+
   if (isFirebaseActive) {
     try {
-      let userCredential;
+      let userCredential: any;
+      const targetEmail = known ? known.email : email;
+
       try {
-        userCredential = await signInWithEmailAndPassword(auth!, email, password);
+        userCredential = await signInWithEmailAndPassword(auth!, targetEmail, password);
       } catch (firstErr: any) {
-        const cleanEmail = email.toLowerCase();
-        // Ali Bilgin (Satışçı) ilk giriş otomatik hesap kaydı ve eşleme
-        if (cleanEmail === "ali.bilgin@takip.com" && (password === "123456" || password === "sales123" || password === "satis123")) {
+        if (known && known.allowedPasswords.includes(password)) {
           try {
-            userCredential = await createUserWithEmailAndPassword(auth!, "ali.bilgin@takip.com", password);
+            userCredential = await createUserWithEmailAndPassword(auth!, targetEmail, password);
           } catch (createErr: any) {
             if (createErr.code === "auth/email-already-in-use") {
-              userCredential = await signInWithEmailAndPassword(auth!, "ali.bilgin@takip.com", password);
+              // Şifre varyasyonlarını dene
+              let signedIn = false;
+              for (const altPass of known.allowedPasswords) {
+                try {
+                  userCredential = await signInWithEmailAndPassword(auth!, targetEmail, altPass);
+                  signedIn = true;
+                  break;
+                } catch {
+                  // Sonraki varyasyonu dene
+                }
+              }
+              if (!signedIn) throw createErr;
             } else {
               throw createErr;
             }
           }
-        } else if (cleanEmail === "satis@takip.com" && password === "satis123") {
-          // Satışçı satis123/sales123 esnekliği
-          userCredential = await signInWithEmailAndPassword(auth!, "satis@takip.com", "sales123");
-        } else if (cleanEmail === "muhasebe@takip.com" && password === "muhasebe123") {
-          // Muhasebeci muhasebe123/accounting123 esnekliği
-          userCredential = await signInWithEmailAndPassword(auth!, "muhasebe@takip.com", "accounting123");
         } else {
           throw firstErr;
         }
       }
 
-      const userDocRef = doc(firestore!, "users", userCredential.user.uid);
+      const uid = userCredential.user.uid;
+      const userDocRef = doc(firestore!, "users", uid);
       let userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
-        // Profil Firestore'da henüz oluşmadıysa otomatik oluştur
-        const role: Role = email.includes("ali.bilgin") || email.includes("satis") ? "sales" : email.includes("muhasebe") ? "accounting" : "admin";
-        const displayName = email.includes("ali.bilgin") ? "Ali Bilgin" : email.includes("satis") ? "Ali Satışçı" : email.includes("muhasebe") ? "Canan Muhasebeci" : "Özkon Yöneticisi";
+        const role: Role = known ? known.role : email.includes("satis") || email.includes("ali") ? "sales" : email.includes("muhasebe") ? "accounting" : "admin";
+        const displayName = known ? known.displayName : "Özkon Yetkilisi";
         const newProfile = {
-          uid: userCredential.user.uid,
-          email: userCredential.user.email || email,
+          uid,
+          email: userCredential.user.email || targetEmail,
           displayName,
           role,
           createdAt: new Date().toISOString()
@@ -109,8 +169,8 @@ export const login = async (email: string, password: string): Promise<AppUser> =
         throw new Error("Hesabınız devre dışı bırakılmıştır!");
       }
       return {
-        uid: userCredential.user.uid,
-        email: userCredential.user.email || email,
+        uid,
+        email: userCredential.user.email || targetEmail,
         ...(data as Omit<AppUser, "uid" | "email">)
       } as AppUser;
     } catch (fbErr: any) {
@@ -127,42 +187,36 @@ export const login = async (email: string, password: string): Promise<AppUser> =
       throw new Error(fbErr.message || "Hatalı kullanıcı adı ya da şifre!");
     }
   } else {
+    // --- YEREL SİMÜLASYON (MOCK MOD) GİRİŞİ ---
     const users = getLocalUsers();
-    let foundUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
-    // Kullanıcı adı eşleme esnekliği (ali.bilgin, ali, satis, admin, sysadmin, muhasebe)
-    if (!foundUser) {
-      const username = email.split("@")[0].toLowerCase();
-      if (username === "ali.bilgin" || username === "ali") {
-        foundUser = users.find((u) => u.email.toLowerCase().includes("ali.bilgin") || u.email.toLowerCase().includes("satis"));
-      } else if (username === "satis") {
-        foundUser = users.find((u) => u.email.toLowerCase().includes("satis") || u.role === "sales");
-      } else if (username === "admin" || username === "patron") {
-        foundUser = users.find((u) => u.email.toLowerCase().includes("admin") || u.role === "admin");
-      } else if (username === "muhasebe") {
-        foundUser = users.find((u) => u.email.toLowerCase().includes("muhasebe") || u.role === "accounting");
-      } else if (username === "sysadmin") {
-        foundUser = users.find((u) => u.email.toLowerCase().includes("sysadmin") || u.role === "sysadmin");
+    if (known) {
+      if (!known.allowedPasswords.includes(password)) {
+        throw new Error("Hatalı kullanıcı adı ya da şifre!");
       }
+      let foundUser = users.find((u) => u.email.toLowerCase() === known.email.toLowerCase());
+      if (!foundUser) {
+        foundUser = {
+          uid: `mock-${username}-id`,
+          email: known.email,
+          displayName: known.displayName,
+          role: known.role,
+          createdAt: new Date().toISOString()
+        };
+      }
+      if (foundUser.disabled) throw new Error("Hesabınız devre dışı bırakılmıştır!");
+      triggerMockAuthChange(foundUser);
+      return foundUser;
     }
 
+    const foundUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
     if (!foundUser) throw new Error("Hatalı kullanıcı adı ya da şifre!");
     if (foundUser.disabled) throw new Error("Hesabınız devre dışı bırakılmıştır!");
 
-    let isPasswordCorrect = false;
-    if (foundUser.password) {
-      isPasswordCorrect = password === foundUser.password || password === "123456" || password === "sales123" || password === "admin123";
-    } else {
-      const allowedPasswords: string[] = ["123456", "12345678"];
-      if (foundUser.role === "admin") allowedPasswords.push("admin123", "admin");
-      else if (foundUser.role === "sysadmin") allowedPasswords.push("sysadmin123");
-      else if (foundUser.role === "sales") allowedPasswords.push("sales123", "satis123", "123456");
-      else if (foundUser.role === "accounting") allowedPasswords.push("accounting123", "muhasebe123");
-      allowedPasswords.push(foundUser.role + "123");
-      isPasswordCorrect = allowedPasswords.includes(password);
+    const allowed = ["admin123", "sysadmin123", "sales123", "satis123", "accounting123", "muhasebe123", "123456", "12345678"];
+    if (foundUser.password ? foundUser.password !== password : !allowed.includes(password)) {
+      throw new Error("Hatalı kullanıcı adı ya da şifre!");
     }
-
-    if (!isPasswordCorrect) throw new Error("Hatalı kullanıcı adı ya da şifre!");
 
     triggerMockAuthChange(foundUser);
     return foundUser;
