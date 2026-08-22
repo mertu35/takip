@@ -24,12 +24,33 @@ jobs:
       - name: Build Project
         run: npm run build
         env:
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY || secrets.FIREBASE_API_KEY }}
+          # NOT: Firebase web API anahtarı gizli bir bilgi DEĞİLDİR; tasarımı
+          # gereği her istemci paketinin içinde bulunur. Güvenlik Firestore
+          # kurallarından gelir, anahtarı saklamaktan değil.
+          #
+          # Eskiden bu değer bir GitHub secret'ından geliyordu. Secret tanımlı
+          # olmadığı için boş kalıyor, uygulama sessizce "yerel simülasyon"
+          # (localStorage) moduna düşüyordu: canlı sitede girilen tüm veriler
+          # buluta değil, kullanıcının tarayıcısına yazılıyordu. Aşağıdaki 5
+          # alan zaten sabit yazıldığı için anahtarı da sabitliyoruz.
+          VITE_FIREBASE_API_KEY: "AIzaSyDbtwV8JVqqiC7fTRaHmOoCEjWn2sYYUP8"
           VITE_FIREBASE_AUTH_DOMAIN: "ozkon-celik-takip.firebaseapp.com"
           VITE_FIREBASE_PROJECT_ID: "ozkon-celik-takip"
           VITE_FIREBASE_STORAGE_BUCKET: "ozkon-celik-takip.firebasestorage.app"
           VITE_FIREBASE_MESSAGING_SENDER_ID: "351331034390"
           VITE_FIREBASE_APP_ID: "1:351331034390:web:5651cab58d7e3b87329c37"
+
+      # Emniyet kemeri: paketin içinde gerçekten bir API anahtarı var mı?
+      # Yoksa uygulama mock moda düşer ve veriler buluta yazılmaz. Böyle bir
+      # sürümü yayınlamaktansa derlemeyi durdurmak daha iyidir.
+      - name: Verify Firebase config is embedded
+        run: |
+          if ! grep -rq "AIzaSy" dist/assets/*.js; then
+            echo "HATA: Derlenen pakette Firebase API anahtari yok."
+            echo "Uygulama yerel simulasyon (localStorage) modunda calisirdi - deploy durduruldu."
+            exit 1
+          fi
+          echo "OK: Firebase yapilandirmasi pakete gomulu."
 
       - name: Deploy to Firebase Hosting
         uses: w9jds/firebase-action@v2.2.0

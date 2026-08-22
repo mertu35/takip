@@ -1,10 +1,11 @@
 import React, { useState, useEffect, type ReactNode } from "react";
 import Sidebar from "./Sidebar";
 import { useAuth } from "../context/AuthContext";
-import { Menu, X, Bell } from "lucide-react";
+import { Menu, X, Bell, AlertTriangle } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getAnnouncements, getSales, getNotifications, markNotificationsRead } from "../services/db";
 import ProfileModal from "./ProfileModal";
+import { isFirebaseActive } from "../services/firebase";
 import type { Announcement, AppNotification, Sale, Role } from "../types";
 
 interface LayoutProps {
@@ -364,6 +365,35 @@ const Layout = ({ children }: LayoutProps) => {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Uygulama buluta bağlanamadığında sessizce localStorage'a yazmaya
+            başlıyor: veriler yalnızca o tarayıcıda kalıyor, başka cihazdan
+            görünmüyor. Bu durum eskiden hiçbir yerde belli olmuyordu; artık
+            ekranda açıkça yazıyor. */}
+        {!isFirebaseActive && (
+          <div
+            role="alert"
+            style={{
+              backgroundColor: "var(--warning-light)",
+              color: "var(--warning-hover)",
+              borderBottom: "2px solid var(--warning)",
+              padding: "0.6rem 2rem",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.6rem",
+              marginLeft: "var(--sidebar-width)",
+              transition: "margin-left var(--transition-normal)"
+            }}
+          >
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>
+              YEREL SİMÜLASYON MODU — Veritabanı bağlantısı yok. Girdiğiniz veriler yalnızca bu
+              tarayıcıda saklanır, başka bir cihazdan görünmez.
+            </span>
           </div>
         )}
 
