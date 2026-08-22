@@ -301,6 +301,46 @@ const Sales = () => {
       setProducts(prodData);
       setSalesHistory(salesData);
       setCompanyProfile(profileData);
+
+      // Tekliften Satışa Dönüştürme Kontrolü
+      const convertRaw = sessionStorage.getItem("takip_convert_proposal");
+      if (convertRaw) {
+        try {
+          const prop = JSON.parse(convertRaw);
+          sessionStorage.removeItem("takip_convert_proposal");
+
+          if (prop.customerId) {
+            setSelectedCustomerId(prop.customerId);
+          }
+
+          if (prop.items && Array.isArray(prop.items)) {
+            const newCart: SaleItem[] = prop.items.map((item: any) => {
+              const matched = prodData.find(
+                (p) =>
+                  p.id === item.productId ||
+                  p.name.toLowerCase().trim() === (item.description || "").toLowerCase().trim()
+              );
+              return {
+                productId: matched ? matched.id : item.productId || "serbest-" + Math.random().toString(36).substring(2, 7),
+                productName: item.description || (matched ? matched.name : "Hizmet / Kalem"),
+                productCode: matched ? matched.barcode || matched.code : "TEKLIF",
+                quantity: item.quantity || 1,
+                price: item.price || 0,
+                costPrice: matched ? (matched as any).costPrice ?? 0 : 0,
+                taxRate: item.taxRate ?? (matched ? matched.taxRate ?? 20 : 20),
+                total: item.total || (item.quantity || 1) * (item.price || 0)
+              };
+            });
+            setCart(newCart);
+          }
+
+          if (prop.discountAmount) setDiscountAmount(prop.discountAmount);
+          if (prop.notes) setNotes(prop.notes);
+          showToast(`${prop.proposalNo} numaralı teklif satış sepetine aktarıldı.`, "success");
+        } catch (e) {
+          console.error("Teklif aktarılırken hata:", e);
+        }
+      }
     } catch (err) {
       console.error("Satış verileri yüklenirken hata:", err);
     } finally {

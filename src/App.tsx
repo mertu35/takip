@@ -21,6 +21,7 @@ const Inventory = lazy(() => import("./pages/Inventory"));
 const Logs = lazy(() => import("./pages/Logs"));
 const Settings = lazy(() => import("./pages/Settings"));
 const ExecutiveReports = lazy(() => import("./pages/ExecutiveReports"));
+const Proposals = lazy(() => import("./pages/Proposals"));
 
 const RouteFallback = () => (
   <div
@@ -151,6 +152,17 @@ function App() {
                       <ProtectedRoute allowedRoles={["admin", "sysadmin"]}>
                         <Layout>
                           <ExecutiveReports />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/proposals"
+                    element={
+                      <ProtectedRoute allowedRoles={["admin", "sales", "sysadmin", "accounting"]}>
+                        <Layout>
+                          <Proposals />
                         </Layout>
                       </ProtectedRoute>
                     }

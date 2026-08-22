@@ -20,7 +20,9 @@ import type {
   Announcement,
   CompanyProfile,
   Role,
-  ActorInfo
+  ActorInfo,
+  Proposal,
+  ProposalStatus
 } from "../types";
 
 import { productsRepository } from "./repositories/productsRepository";
@@ -28,6 +30,7 @@ import { categoriesRepository } from "./repositories/categoriesRepository";
 import { customersRepository, getSalesByCustomer as _getSalesByCustomer } from "./repositories/customersRepository";
 import { salesRepository } from "./repositories/salesRepository";
 import { paymentsRepository, type NewPaymentInput } from "./repositories/paymentsRepository";
+import { proposalsRepository } from "./repositories/proposalsRepository";
 import { notificationsRepository } from "./repositories/notificationsRepository";
 import { logsRepository } from "./repositories/logsRepository";
 import { announcementsRepository } from "./repositories/announcementsRepository";
@@ -298,6 +301,47 @@ export const updateCompanyProfile = (
   currentUserName: string,
   currentUserRole: Role | string
 ) => settingsRepository.updateCompanyProfile(profileData, actorOf(currentUserId, currentUserName, currentUserRole));
+
+// --- TEKLİF MEKTUBU (PROPOSALS) ---
+export const getProposals = (role?: Role | string, userId?: string): Promise<Proposal[]> =>
+  proposalsRepository.getAll(role, userId);
+
+export const getProposalById = (id: string): Promise<Proposal | null> =>
+  proposalsRepository.getById(id);
+
+export const addProposal = (
+  input: Parameters<typeof proposalsRepository.add>[0],
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) =>
+  proposalsRepository.add(input, actorOf(currentUserId, currentUserName, currentUserRole));
+
+export const updateProposal = (
+  id: string,
+  updatedFields: Partial<Proposal>,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) =>
+  proposalsRepository.update(id, updatedFields, actorOf(currentUserId, currentUserName, currentUserRole));
+
+export const updateProposalStatus = (
+  id: string,
+  status: ProposalStatus,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) =>
+  proposalsRepository.updateStatus(id, status, actorOf(currentUserId, currentUserName, currentUserRole));
+
+export const deleteProposal = (
+  id: string,
+  currentUserId: string,
+  currentUserName: string,
+  currentUserRole: Role | string
+) =>
+  proposalsRepository.remove(id, actorOf(currentUserId, currentUserName, currentUserRole));
 
 // --- FİREBASE SEED (Login.jsx tarafından kullanılıyor) ---
 export { isDatabaseInitialized, initializeFirebaseDatabase } from "./seed";

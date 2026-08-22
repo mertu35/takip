@@ -159,6 +159,46 @@ export interface CompanyProfile {
   updatedBy?: string;
 }
 
+// --- TEKLİF MEKTUBU (PROPOSAL) TİPLERİ ---
+export type ProposalStatus = "draft" | "sent" | "accepted" | "rejected" | "expired";
+
+export interface ProposalItem {
+  id: string;
+  productId?: string;
+  description: string;
+  quantity: number;
+  unit: string; // ADET, TRB, TON, SEFER, KG, M2, METRE
+  price: number;
+  taxRate: number;
+  total: number;
+}
+
+export interface Proposal {
+  id: string;
+  proposalNo: string; // Örn: TKL-2026-0001
+  date: string; // YYYY-MM-DD veya ISO
+  validUntil: string; // YYYY-MM-DD
+  salespersonId: string;
+  salespersonName: string;
+  salespersonPhone?: string;
+  customerId?: string;
+  customerName: string;
+  customerCompany?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  items: ProposalItem[];
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  status: ProposalStatus;
+  notes?: string;
+  termsAndConditions?: string;
+  convertedSaleId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // Yardımcı: iş mantığı fonksiyonlarının (loglama gibi) ihtiyaç duyduğu
 // çağıran-kullanıcı bilgisi. Fonksiyon imzalarını tek tek uzatmak yerine
 // tek bir parametre nesnesi olarak taşınır.

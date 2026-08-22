@@ -18,6 +18,7 @@ import {
   User,
   Users,
   TrendingUp,
+  FileText,
   type LucideIcon
 } from "lucide-react";
 import type { Role } from "../types";
@@ -58,6 +59,7 @@ const Sidebar = ({ onOpenProfile }: SidebarProps) => {
     menuItems.push(
       { path: "/", label: "Dashboard", icon: LayoutDashboard },
       { path: "/reports", label: "Patron Raporları", icon: TrendingUp },
+      { path: "/proposals", label: "Teklif Mektupları", icon: FileText },
       { path: "/customers", label: "Müşteriler & Cari", icon: Users },
       { path: "/inventory", label: "Ürün & Stok", icon: Package },
       { path: "/accounting", label: "Satış Geçmişi", icon: CheckSquare },
@@ -67,17 +69,20 @@ const Sidebar = ({ onOpenProfile }: SidebarProps) => {
     menuItems.push(
       { path: "/settings", label: "Sistem Ayarları", icon: Settings },
       { path: "/reports", label: "Yönetici Raporları", icon: TrendingUp },
+      { path: "/proposals", label: "Teklif Mektupları", icon: FileText },
       { path: "/logs", label: "İşlem Logları", icon: History }
     );
   } else if (user.role === "sales") {
     menuItems.push(
       { path: "/sales", label: "Satış Paneli", icon: ShoppingBag },
+      { path: "/proposals", label: "Teklif Mektupları", icon: FileText },
       { path: "/customers", label: "Müşteriler", icon: Users },
       { path: "/inventory", label: "Ürün & Stok", icon: Package }
     );
   } else if (user.role === "accounting") {
     menuItems.push(
       { path: "/accounting", label: "Muhasebe Onay", icon: CheckSquare },
+      { path: "/proposals", label: "Teklif Mektupları", icon: FileText },
       { path: "/inventory", label: "Ürün & Stok", icon: Package }
     );
   }
