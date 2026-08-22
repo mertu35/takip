@@ -53,13 +53,18 @@ jobs:
           echo "OK: Firebase yapilandirmasi pakete gomulu."
 
       # NOT: Eskiden burada yalnizca "--only hosting" vardi. Bu yuzden
-      # firestore.rules dosyasindaki guvenlik duzeltmeleri repoda duruyor ama
-      # canliya hic gitmiyordu; kurallar ancak elle "firebase deploy"
-      # calistirildiginda guncelleniyordu. Artik kod ile kurallar birlikte
-      # yayina gidiyor, ikisi arasinda kayma olusamaz.
-      - name: Deploy to Firebase Hosting & Firestore Rules
+      # firestore.rules ve firestore.indexes.json repoda guncelleniyor ama
+      # canliya hic gitmiyordu; ancak elle "firebase deploy" calistirildiginda
+      # guncelleniyorlardi. Artik kod, kurallar ve index'ler birlikte yayina
+      # gidiyor; repo ile canli arasinda kayma olusamaz.
+      #
+      # "firestore" hedefi hem rules hem indexes'i kapsar. Ekleme aninda
+      # canlidaki 3 index dosyadakiyle birebir esitti, yani silinecek index
+      # yoktu. Ileride konsoldan ELLE index olusturursan onu bu dosyaya da
+      # eklemeyi unutma; yoksa deploy onu silmeye calisabilir.
+      - name: Deploy to Firebase Hosting, Rules & Indexes
         uses: w9jds/firebase-action@v2.2.0
         with:
-          args: deploy --only hosting,firestore:rules
+          args: deploy --only hosting,firestore
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
