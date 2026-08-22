@@ -2,25 +2,10 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Proposal, CompanyProfile } from "../types";
 import { OZKON_LOGO_BASE64 } from "./logoBase64";
-
-// Türkçe karakter desteği için güvenli dönüştürücü
-const tr = (text?: string | null) =>
-  (text || "")
-    .replace(/İ/g, "I")
-    .replace(/ı/g, "i")
-    .replace(/Ş/g, "S")
-    .replace(/ş/g, "s")
-    .replace(/Ğ/g, "G")
-    .replace(/ğ/g, "g")
-    .replace(/Ü/g, "U")
-    .replace(/ü/g, "u")
-    .replace(/Ö/g, "O")
-    .replace(/ö/g, "o")
-    .replace(/Ç/g, "C")
-    .replace(/ç/g, "c");
+import { registerTurkishFonts } from "./customFonts";
 
 const fmt = (num?: number) =>
-  (num || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " TL";
+  (num || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₺";
 
 export const generateProposalPDF = (
   proposal: Proposal,
@@ -30,11 +15,14 @@ export const generateProposalPDF = (
   const W = doc.internal.pageSize.getWidth();
   const margin = 14;
 
-  const companyName = tr(companyProfile?.companyName || "OZKON YAPI INSAAT LTD. STI.");
-  const address = tr(companyProfile?.address || "Valide Sultan Mah. 100. Yil Cad. No:74/B Karaman-Merkez");
+  // Türkçe karakter desteği için Roboto fontunu kaydet ve aktif et
+  registerTurkishFonts(doc);
+
+  const companyName = companyProfile?.companyName || "ÖZKON YAPI İNŞAAT LTD. ŞTİ.";
+  const address = companyProfile?.address || "Valide Sultan Mah. 100. Yıl Cad. No:74/B Karaman-Merkez";
   const phone = companyProfile?.phone || "0338 213 76 67";
   const fax = companyProfile?.fax || "0338 213 33 43";
-  const taxOffice = tr(companyProfile?.taxOffice || "Karaman");
+  const taxOffice = companyProfile?.taxOffice || "Karaman";
   const taxNumber = companyProfile?.taxNumber || "7000074860";
 
   // --- 1. ÜST BAŞLIK & ANTET ALANI ---
@@ -43,14 +31,13 @@ export const generateProposalPDF = (
   try {
     doc.addImage(OZKON_LOGO_BASE64, "PNG", margin, 10, 44, 13.3);
   } catch (e) {
-    // Fallback: Logo yüklenemezse şık tipografi
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Roboto", "bold");
     doc.setFontSize(14);
     doc.setTextColor(20, 45, 90);
     doc.text(companyName, margin, 18);
   }
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont("Roboto", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(80, 80, 80);
   doc.text(address, margin, 27.5);
@@ -59,13 +46,13 @@ export const generateProposalPDF = (
 
   // Sağ: TEKLİF MEKTUBU Başlığı ve Meta Bilgileri
   const rightX = W - margin;
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setFontSize(16);
   doc.setTextColor(30, 90, 160);
-  doc.text("TEKLIF MEKTUBU", rightX, 17, { align: "right" });
+  doc.text("TEKLİF MEKTUBU", rightX, 17, { align: "right" });
 
   doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setTextColor(70, 70, 70);
 
   const metaStartY = 22;
@@ -73,30 +60,30 @@ export const generateProposalPDF = (
   const col2X = rightX;
 
   doc.text("Tarih:", col1X, metaStartY);
-  doc.setFont("helvetica", "normal");
+  doc.setFont("Roboto", "normal");
   doc.text(proposal.date || new Date().toLocaleDateString("tr-TR"), col2X, metaStartY, { align: "right" });
 
-  doc.setFont("helvetica", "bold");
-  doc.text("Gecerlilik:", col1X, metaStartY + 4);
-  doc.setFont("helvetica", "normal");
+  doc.setFont("Roboto", "bold");
+  doc.text("Geçerlilik:", col1X, metaStartY + 4);
+  doc.setFont("Roboto", "normal");
   doc.text(proposal.validUntil || "-", col2X, metaStartY + 4, { align: "right" });
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.text("Teklif No:", col1X, metaStartY + 8);
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setTextColor(30, 90, 160);
   doc.text(proposal.proposalNo, col2X, metaStartY + 8, { align: "right" });
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setTextColor(70, 70, 70);
   doc.text("Yetkili:", col1X, metaStartY + 12);
-  doc.setFont("helvetica", "normal");
-  doc.text(tr(proposal.salespersonName || "Abdullah Mete"), col2X, metaStartY + 12, { align: "right" });
+  doc.setFont("Roboto", "normal");
+  doc.text(proposal.salespersonName || "Abdullah Mete", col2X, metaStartY + 12, { align: "right" });
 
   if (proposal.salespersonPhone) {
-    doc.setFont("helvetica", "bold");
+    doc.setFont("Roboto", "bold");
     doc.text("Tel:", col1X, metaStartY + 16);
-    doc.setFont("helvetica", "normal");
+    doc.setFont("Roboto", "normal");
     doc.text(proposal.salespersonPhone, col2X, metaStartY + 16, { align: "right" });
   }
 
@@ -109,23 +96,23 @@ export const generateProposalPDF = (
   doc.setFillColor(245, 248, 253);
   doc.roundedRect(margin, 45, W - 2 * margin, 18, 1.5, 1.5, "F");
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(30, 90, 160);
-  doc.text("MUSTERI BILGILERI", margin + 4, 50);
+  doc.text("MÜŞTERİ BİLGİLERİ", margin + 4, 50);
 
   doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setTextColor(20, 25, 35);
-  const custTitle = tr(proposal.customerCompany || proposal.customerName || "Sayin Musteri");
+  const custTitle = proposal.customerCompany || proposal.customerName || "Sayın Müşteri";
   doc.text(custTitle, margin + 4, 55.5);
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont("Roboto", "normal");
   doc.setFontSize(8);
   doc.setTextColor(90, 90, 90);
   const contactInfo = [
     proposal.customerPhone ? `Tel: ${proposal.customerPhone}` : "",
-    proposal.customerAddress ? `Adres: ${tr(proposal.customerAddress)}` : ""
+    proposal.customerAddress ? `Adres: ${proposal.customerAddress}` : ""
   ].filter(Boolean).join("   |   ");
 
   if (contactInfo) {
@@ -135,9 +122,9 @@ export const generateProposalPDF = (
   // --- 3. KALEMLER TABLOSU ---
   const tableData = proposal.items.map((item, idx) => [
     idx + 1,
-    tr(item.description),
+    item.description,
     item.quantity.toLocaleString("tr-TR"),
-    tr(item.unit || "ADET"),
+    item.unit || "ADET",
     fmt(item.price),
     fmt(item.total || (item.quantity * item.price))
   ]);
@@ -145,17 +132,20 @@ export const generateProposalPDF = (
   autoTable(doc, {
     startY: 66,
     margin: { left: margin, right: margin },
-    head: [["#", "Urun / Hizmet Aciklamasi", "Miktar", "Birim", "Birim Fiyat", "Toplam"]],
+    head: [["#", "Ürün / Hizmet Açıklaması", "Miktar", "Birim", "Birim Fiyat", "Toplam"]],
     body: tableData,
     theme: "striped",
     headStyles: {
       fillColor: [30, 90, 160], // Özkon Blue
       textColor: [255, 255, 255],
+      font: "Roboto",
       fontStyle: "bold",
       fontSize: 8.5,
       halign: "left"
     },
     styles: {
+      font: "Roboto",
+      fontStyle: "normal",
       fontSize: 8,
       cellPadding: 2.2,
       lineColor: [230, 235, 245],
@@ -163,11 +153,11 @@ export const generateProposalPDF = (
     },
     columnStyles: {
       0: { cellWidth: 8, halign: "center" },
-      1: { cellWidth: "auto", halign: "left", fontStyle: "bold" },
+      1: { cellWidth: "auto", halign: "left", font: "Roboto", fontStyle: "bold" },
       2: { cellWidth: 20, halign: "center" },
       3: { cellWidth: 18, halign: "center" },
       4: { cellWidth: 26, halign: "right" },
-      5: { cellWidth: 28, halign: "right", fontStyle: "bold" }
+      5: { cellWidth: 28, halign: "right", font: "Roboto", fontStyle: "bold" }
     },
     alternateRowStyles: {
       fillColor: [248, 250, 254]
@@ -184,13 +174,13 @@ export const generateProposalPDF = (
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont("Roboto", "normal");
   doc.text("Ara Toplam:", summaryBoxX, currY + 4);
   doc.text(fmt(proposal.subtotal), rightX, currY + 4, { align: "right" });
 
   if ((proposal.discountAmount || 0) > 0) {
     currY += 5;
-    doc.text("Iskonto / Indirim:", summaryBoxX, currY + 4);
+    doc.text("İskonto / İndirim:", summaryBoxX, currY + 4);
     doc.text("-" + fmt(proposal.discountAmount), rightX, currY + 4, { align: "right" });
   }
 
@@ -204,7 +194,7 @@ export const generateProposalPDF = (
   doc.setFillColor(235, 243, 255);
   doc.roundedRect(summaryBoxX - 2, currY, summaryBoxWidth + 2, 8, 1, 1, "F");
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(30, 90, 160);
   doc.text("GENEL TOPLAM:", summaryBoxX + 2, currY + 5.5);
@@ -217,17 +207,17 @@ export const generateProposalPDF = (
   doc.setFillColor(242, 246, 252);
   doc.roundedRect(margin, notesY, W - 2 * margin, notesHeight, 1.5, 1.5, "F");
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setFontSize(8);
   doc.setTextColor(30, 90, 160);
-  doc.text("NOTLAR & SATIS SARTLARI", margin + 4, notesY + 5);
+  doc.text("NOTLAR & SATIŞ ŞARTLARI", margin + 4, notesY + 5);
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont("Roboto", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(70, 70, 70);
 
-  const defaultTerms = proposal.termsAndConditions || proposal.notes || "1. Fiyatlarimiza KDV dahil degildir.\n2. Teklifimiz belirtilen gecerlilik tarihine kadar gecerlidir.\n3. Nakliye ve bosaltma sartlari teklif kapsamindadir.";
-  const splitNotes = doc.splitTextToSize(tr(defaultTerms), W - 2 * margin - 8);
+  const defaultTerms = proposal.termsAndConditions || proposal.notes || "1. Fiyatlarımıza KDV dahil değildir.\n2. Teklifimiz belirtilen geçerlilik tarihine kadar geçerlidir.\n3. Nakliye ve boşaltma şartları teklif kapsamındadır.";
+  const splitNotes = doc.splitTextToSize(defaultTerms, W - 2 * margin - 8);
   doc.text(splitNotes, margin + 4, notesY + 9.5);
 
   // --- 6. İMZA / ONAY ALANI ---
@@ -238,32 +228,33 @@ export const generateProposalPDF = (
   // Sol: Teklifi Hazırlayan
   const signBoxWidth = 70;
   doc.line(margin + 5, signY + 16, margin + signBoxWidth, signY + 16);
-  doc.setFont("helvetica", "bold");
+  doc.setFont("Roboto", "bold");
   doc.setFontSize(7.5);
   doc.setTextColor(70, 70, 70);
-  doc.text("Teklifi Hazirlayan", margin + signBoxWidth / 2, signY + 4, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.text(tr(proposal.salespersonName || "Abdullah Mete"), margin + signBoxWidth / 2, signY + 8, { align: "center" });
-  doc.text("Kase / Imza", margin + signBoxWidth / 2, signY + 20, { align: "center" });
+  doc.text("Teklifi Hazırlayan", margin + signBoxWidth / 2, signY + 4, { align: "center" });
+  doc.setFont("Roboto", "normal");
+  doc.text(proposal.salespersonName || "Abdullah Mete", margin + signBoxWidth / 2, signY + 8, { align: "center" });
+  doc.text("Kaşe / İmza", margin + signBoxWidth / 2, signY + 20, { align: "center" });
 
   // Sağ: Müşteri Onayı
   const rightSignX = W - margin - signBoxWidth;
   doc.line(rightSignX + 5, signY + 16, rightX - 5, signY + 16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Teklifi Onaylayan Musteri", rightSignX + signBoxWidth / 2, signY + 4, { align: "center" });
-  doc.setFont("helvetica", "normal");
+  doc.setFont("Roboto", "bold");
+  doc.text("Teklifi Onaylayan Müşteri", rightSignX + signBoxWidth / 2, signY + 4, { align: "center" });
+  doc.setFont("Roboto", "normal");
   doc.text(custTitle, rightSignX + signBoxWidth / 2, signY + 8, { align: "center" });
-  doc.text("Kase / Imza", rightSignX + signBoxWidth / 2, signY + 20, { align: "center" });
+  doc.text("Kaşe / İmza", rightSignX + signBoxWidth / 2, signY + 20, { align: "center" });
 
   // --- 7. ALT BİLGİ (FOOTER) ---
   doc.setFontSize(6.5);
   doc.setTextColor(150, 150, 150);
   doc.text(
-    `Bu teklif mektubu Ozkon Yapi Takip Sistemi tarafindan ${new Date().toLocaleDateString("tr-TR")} tarihinde olusturulmustur. Belge No: ${proposal.proposalNo}`,
+    `Bu teklif mektubu Özkon Yapı Takip Sistemi tarafından ${new Date().toLocaleDateString("tr-TR")} tarihinde oluşturulmuştur. Belge No: ${proposal.proposalNo}`,
     W / 2,
     290,
     { align: "center" }
   );
 
-  doc.save(`Teklif_${proposal.proposalNo}_${tr(proposal.customerCompany || proposal.customerName)}.pdf`);
+  const safeFileName = `Teklif_${proposal.proposalNo}_${proposal.customerCompany || proposal.customerName || "Musteri"}`.replace(/[\/\\?%*:|"<>]/g, "_");
+  doc.save(`${safeFileName}.pdf`);
 };
