@@ -1,11 +1,9 @@
-// Takip Sistemi - Teklif Mektubu Yönetimi (Proposals)
+// Takip Sistemi - Teklif Mektubu & Çıktı Arşivi (Proposals)
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   getProposals,
   addProposal,
   updateProposal,
-  updateProposalStatus,
   deleteProposal,
   getCustomers,
   getProducts,
@@ -18,51 +16,33 @@ import {
   Plus,
   Search,
   Download,
-  Printer,
   Trash2,
   Edit,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  AlertTriangle,
-  Send,
   MessageCircle,
   Building,
   User,
   Phone,
   Calendar,
   Layers,
-  ChevronRight,
-  ArrowRight,
-  ShoppingCart,
   Sparkles,
-  DollarSign
+  CheckCircle2,
+  ShoppingCart
 } from "lucide-react";
 import EmptyState from "../components/EmptyState";
 import { SkeletonTable } from "../components/Skeleton";
 import { generateProposalPDF } from "../utils/generateProposalPDF";
 import { formatCurrency, formatDate } from "../utils/format";
-import type { Proposal, ProposalItem, ProposalStatus, Customer, Product, CompanyProfile } from "../types";
+import type { Proposal, ProposalItem, Customer, Product, CompanyProfile } from "../types";
 
 const UNIT_OPTIONS = ["ADET", "TRB", "TON", "SEFER", "KG", "M2", "METRE", "KUTU", "PAKET", "SAAT"];
 
-const STATUS_LABELS: Record<ProposalStatus, { label: string; badge: string; icon: any }> = {
-  draft: { label: "Taslak", badge: "badge-secondary", icon: Clock },
-  sent: { label: "Gönderildi", badge: "badge-primary", icon: Send },
-  accepted: { label: "Kabul Edildi", badge: "badge-success", icon: CheckCircle2 },
-  rejected: { label: "Reddedildi", badge: "badge-danger", icon: XCircle },
-  expired: { label: "Süresi Doldu", badge: "badge-warning", icon: AlertTriangle }
-};
-
 const DEFAULT_TERMS = `1. Fiyatlarımıza KDV dahil değildir.
 2. Teklifimiz belirtilen geçerlilik tarihine kadar geçerlidir.
-3. Nakliye ve boşaltma şartları teklif kapsamındadır.
-4. Ödeme vadeli satışlarda teslimat öncesi mutabakat sağlanmalıdır.`;
+3. Nakliye ve boşaltma şartları teklif detayına göre belirlenmiştir.`;
 
 const Proposals = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const navigate = useNavigate();
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -70,9 +50,8 @@ const Proposals = () => {
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Filtreler
+  // Arama Filtresi
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -94,7 +73,6 @@ const Proposals = () => {
     discountAmount: number;
     notes: string;
     termsAndConditions: string;
-    status: ProposalStatus;
   }>({
     customerId: "",
     customerName: "",
@@ -117,8 +95,7 @@ const Proposals = () => {
     ],
     discountAmount: 0,
     notes: "",
-    termsAndConditions: DEFAULT_TERMS,
-    status: "sent"
+    termsAndConditions: DEFAULT_TERMS
   });
 
   const fetchData = async () => {
@@ -171,8 +148,7 @@ const Proposals = () => {
       ],
       discountAmount: 0,
       notes: "",
-      termsAndConditions: DEFAULT_TERMS,
-      status: "sent"
+      termsAndConditions: DEFAULT_TERMS
     });
     setShowModal(true);
   };
@@ -193,13 +169,12 @@ const Proposals = () => {
       items: prop.items.map((i) => ({ ...i })),
       discountAmount: prop.discountAmount || 0,
       notes: prop.notes || "",
-      termsAndConditions: prop.termsAndConditions || DEFAULT_TERMS,
-      status: prop.status
+      termsAndConditions: prop.termsAndConditions || DEFAULT_TERMS
     });
     setShowModal(true);
   };
 
-  // Müşteri Seçimi Değiştiğinde
+  // Müşteri Seçildiğinde
   const handleCustomerSelect = (customerId: string) => {
     if (!customerId) {
       setProposalForm((prev) => ({
@@ -257,7 +232,7 @@ const Proposals = () => {
     }));
   };
 
-  // Kalem Güncelle
+  // Kalem Değişikliği
   const handleItemChange = (idx: number, field: keyof ProposalItem, value: any) => {
     setProposalForm((prev) => {
       const updatedItems = [...prev.items];
@@ -274,7 +249,7 @@ const Proposals = () => {
     });
   };
 
-  // Stoktan Ürün Seçip Satıra Doldur
+  // Stoktan Ürün Seçimi
   const handleSelectProductToItem = (idx: number, productId: string) => {
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
@@ -295,14 +270,14 @@ const Proposals = () => {
     });
   };
 
-  // Geçerlilik Süresi Hızlı Butonları (7, 15, 30 Gün)
+  // Hızlı Gün Butonları
   const handleSetValidityDays = (days: number) => {
     const d = new Date(proposalForm.date || Date.now());
     d.setDate(d.getDate() + days);
     setProposalForm((prev) => ({ ...prev, validUntil: d.toISOString().split("T")[0] }));
   };
 
-  // Finansal Toplam Hesaplama
+  // Finansal Toplamlar
   const subtotal = proposalForm.items.reduce((acc, item) => acc + (item.quantity * item.price || 0), 0);
   const discount = Math.min(proposalForm.discountAmount || 0, subtotal);
   const taxAmount = proposalForm.items.reduce((acc, item) => {
@@ -311,7 +286,7 @@ const Proposals = () => {
   }, 0);
   const totalAmount = Math.max(0, subtotal - discount) + taxAmount;
 
-  // Form Gönderimi (Kaydet)
+  // Form Kaydet
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -323,7 +298,7 @@ const Proposals = () => {
 
     const validItems = proposalForm.items.filter((i) => i.description.trim() && i.quantity > 0);
     if (validItems.length === 0) {
-      showToast("Lütfen en az bir ürün veya hizmet açıklaması ve miktarı girin.", "warning");
+      showToast("Lütfen en az bir ürün veya hizmet açıklaması girin.", "warning");
       return;
     }
 
@@ -333,15 +308,19 @@ const Proposals = () => {
         ...proposalForm,
         salespersonId: user.uid,
         salespersonName: user.displayName || "Yetkili Satışçı",
-        items: validItems
+        items: validItems,
+        status: "sent" as const
       };
 
       if (modalMode === "add") {
         const created = await addProposal(payload, user.uid, user.displayName, user.role);
-        showToast(`${created.proposalNo} numaralı teklif mektubu oluşturuldu.`, "success");
+        showToast(`${created.proposalNo} numaralı teklif kaydedildi.`, "success");
+        // Otomatik PDF üret
+        generateProposalPDF(created, companyProfile);
       } else {
-        await updateProposal(selectedProposalId, payload, user.uid, user.displayName, user.role);
-        showToast("Teklif mektubu güncellendi.", "success");
+        const updated = await updateProposal(selectedProposalId, payload, user.uid, user.displayName, user.role);
+        showToast("Teklif güncellendi.", "success");
+        generateProposalPDF(updated, companyProfile);
       }
 
       setShowModal(false);
@@ -353,7 +332,7 @@ const Proposals = () => {
     }
   };
 
-  // Teklif Silme
+  // Teklif Sil
   const handleDeleteProposal = async (prop: Proposal) => {
     if (!window.confirm(`"${prop.proposalNo}" numaralı teklif mektubunu silmek istediğinize emin misiniz?`)) {
       return;
@@ -361,39 +340,10 @@ const Proposals = () => {
 
     try {
       await deleteProposal(prop.id, user!.uid, user!.displayName, user!.role);
-      showToast("Teklif mektubu silindi.", "success");
+      showToast("Teklif silindi.", "success");
       fetchData();
     } catch (err: any) {
       showToast("Silinirken hata: " + err.message, "error");
-    }
-  };
-
-  // Teklifi Satışa Dönüştür (Satış Ekranına Aktar)
-  const handleConvertToSale = async (prop: Proposal) => {
-    if (!window.confirm(`"${prop.proposalNo}" numaralı teklif kabul edildi olarak işaretlensin ve Satış Terminaline aktarılsın mı?`)) {
-      return;
-    }
-
-    try {
-      await updateProposalStatus(prop.id, "accepted", user!.uid, user!.displayName, user!.role);
-      showToast("Teklif kabul edildi olarak işaretlendi. Satış ekranına yönlendiriliyorsunuz...", "success");
-
-      // Satış ekranında sepeti teklif kalemleriyle doldurabilmek için session state'e yaz
-      sessionStorage.setItem(
-        "takip_convert_proposal",
-        JSON.stringify({
-          proposalNo: prop.proposalNo,
-          customerId: prop.customerId,
-          customerCompany: prop.customerCompany || prop.customerName,
-          items: prop.items,
-          discountAmount: prop.discountAmount,
-          notes: `[Teklif No: ${prop.proposalNo}] ` + (prop.notes || "")
-        })
-      );
-
-      navigate("/sales");
-    } catch (err: any) {
-      showToast("İşlem hatası: " + err.message, "error");
     }
   };
 
@@ -418,38 +368,36 @@ ${itemsList}
 *Genel Toplam:* ${formatCurrency(prop.totalAmount)}
 *Yetkili:* ${prop.salespersonName} (${prop.salespersonPhone || ""})
 
-Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
+İyi çalışmalar dileriz.`;
 
     const encoded = encodeURIComponent(message);
     const url = phoneClean ? `https://wa.me/90${phoneClean}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
     window.open(url, "_blank");
   };
 
-  // Filtreleme
+  // Arama Filtresi
   const filteredProposals = proposals.filter((p) => {
     const q = searchQuery.toLowerCase();
-    const matchesSearch =
+    return (
       p.proposalNo.toLowerCase().includes(q) ||
       p.customerName.toLowerCase().includes(q) ||
       (p.customerCompany || "").toLowerCase().includes(q) ||
-      p.salespersonName.toLowerCase().includes(q);
-
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
+      p.salespersonName.toLowerCase().includes(q)
+    );
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }} className="animate-fade">
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }} className="animate-fade">
       {/* Üst Başlık & Aksiyon Şeridi */}
       <section className="card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
           <div>
             <h2 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <FileText size={22} className="text-primary" />
-              <span>Teklif Mektubu Yönetimi</span>
+              <span>Teklif Mektupları</span>
             </h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: "0.25rem 0 0 0" }}>
-              Müşterilere resmi inşaat ve malzeme teklifleri hazırlayın, PDF çıktısı alın ve kabul edilenleri satışa aktarın.
+              Müşterilere resmi inşaat ve malzeme teklifleri hazırlayın, PDF çıktısı alın ve geçmiş teklifleri arşivleyin.
             </p>
           </div>
 
@@ -459,52 +407,19 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
           </button>
         </div>
 
-        {/* Arama ve Durum Filtreleri */}
-        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ position: "relative", flex: 1, minWidth: "240px" }}>
-            <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
-              <Search size={16} />
-            </span>
-            <input
-              type="text"
-              className="form-control"
-              style={{ paddingLeft: "2.25rem" }}
-              placeholder="Teklif No, Müşteri veya Yetkili ara..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className={`btn btn-sm ${statusFilter === "all" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setStatusFilter("all")}
-            >
-              Tümü ({proposals.length})
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${statusFilter === "sent" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setStatusFilter("sent")}
-            >
-              Gönderildi
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${statusFilter === "accepted" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setStatusFilter("accepted")}
-            >
-              Kabul Edildi
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${statusFilter === "draft" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setStatusFilter("draft")}
-            >
-              Taslak
-            </button>
-          </div>
+        {/* Arama Alanı */}
+        <div style={{ position: "relative", maxWidth: "400px" }}>
+          <span style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}>
+            <Search size={16} />
+          </span>
+          <input
+            type="text"
+            className="form-control"
+            style={{ paddingLeft: "2.25rem" }}
+            placeholder="Teklif No veya Müşteri Ara..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
       </section>
 
@@ -512,7 +427,7 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
       <section className="card" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: "1.5rem" }}>
-            <SkeletonTable rows={6} columns={7} />
+            <SkeletonTable rows={6} columns={6} />
           </div>
         ) : filteredProposals.length === 0 ? (
           <EmptyState
@@ -530,167 +445,177 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
                   <th>Teklif No</th>
                   <th>Müşteri / Firma</th>
                   <th>Teklif Tarihi</th>
-                  <th>Geçerlilik</th>
+                  <th>Son Geçerlilik</th>
                   <th style={{ textAlign: "right" }}>Tutar</th>
-                  <th style={{ textAlign: "center" }}>Durum</th>
-                  <th>Yetkili</th>
-                  <th style={{ textAlign: "right", width: "220px" }}>İşlemler</th>
+                  <th>Yetkili Satışçı</th>
+                  <th style={{ textAlign: "right", width: "160px" }}>İşlemler</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredProposals.map((prop) => {
-                  const statusConf = STATUS_LABELS[prop.status] || STATUS_LABELS.sent;
-                  const isExpired = new Date(prop.validUntil) < new Date() && prop.status === "sent";
+                {filteredProposals.map((prop) => (
+                  <tr key={prop.id}>
+                    <td style={{ fontWeight: 700, color: "var(--primary)" }}>{prop.proposalNo}</td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{prop.customerCompany || prop.customerName}</div>
+                      {prop.customerCompany && prop.customerName && (
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>İlgili: {prop.customerName}</div>
+                      )}
+                    </td>
+                    <td>{formatDate(prop.date)}</td>
+                    <td>{formatDate(prop.validUntil)}</td>
+                    <td style={{ textAlign: "right", fontWeight: 700, fontSize: "0.95rem" }}>
+                      {formatCurrency(prop.totalAmount)}
+                    </td>
+                    <td style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{prop.salespersonName}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: "0.35rem", justifyContent: "flex-end" }}>
+                        {/* PDF İndir */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-icon btn-sm"
+                          onClick={() => generateProposalPDF(prop, companyProfile)}
+                          title="Özkon Antetli Teklif PDF İndir"
+                          aria-label="PDF İndir"
+                        >
+                          <Download size={15} />
+                        </button>
 
-                  return (
-                    <tr key={prop.id}>
-                      <td style={{ fontWeight: 700, color: "var(--primary)" }}>{prop.proposalNo}</td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{prop.customerCompany || prop.customerName}</div>
-                        {prop.customerCompany && prop.customerName && (
-                          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Yetkili: {prop.customerName}</div>
-                        )}
-                      </td>
-                      <td>{formatDate(prop.date)}</td>
-                      <td>
-                        <div style={{ fontSize: "0.85rem", color: isExpired ? "var(--danger)" : "inherit", fontWeight: isExpired ? 700 : 400 }}>
-                          {formatDate(prop.validUntil)}
-                          {isExpired && <span style={{ fontSize: "0.7rem", marginLeft: "0.3rem" }}>(Doldu)</span>}
-                        </div>
-                      </td>
-                      <td style={{ textAlign: "right", fontWeight: 700, fontSize: "0.95rem" }}>
-                        {formatCurrency(prop.totalAmount)}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <span className={`badge ${statusConf.badge}`} style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem" }}>
-                          {statusConf.label}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{prop.salespersonName}</td>
-                      <td>
-                        <div style={{ display: "flex", gap: "0.35rem", justifyContent: "flex-end" }}>
-                          {/* PDF İndir */}
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-icon btn-sm"
-                            onClick={() => generateProposalPDF(prop, companyProfile)}
-                            title="Özkon Antetli A4 Teklif PDF İndir"
-                            aria-label="PDF İndir"
-                          >
-                            <Download size={15} />
-                          </button>
+                        {/* WhatsApp Paylaş */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-icon btn-sm"
+                          style={{ color: "#25D366" }}
+                          onClick={() => handleShareWhatsApp(prop)}
+                          title="WhatsApp ile Gönder"
+                          aria-label="WhatsApp"
+                        >
+                          <MessageCircle size={15} />
+                        </button>
 
-                          {/* WhatsApp Paylaş */}
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-icon btn-sm"
-                            style={{ color: "#25D366" }}
-                            onClick={() => handleShareWhatsApp(prop)}
-                            title="Müşteriye WhatsApp ile Gönder"
-                            aria-label="WhatsApp"
-                          >
-                            <MessageCircle size={15} />
-                          </button>
+                        {/* Düzenle */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-icon btn-sm"
+                          onClick={() => handleOpenEditModal(prop)}
+                          title="Teklifi Düzenle"
+                          aria-label="Düzenle"
+                        >
+                          <Edit size={15} />
+                        </button>
 
-                          {/* Satışa Dönüştür */}
-                          {prop.status !== "accepted" && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-icon btn-sm"
-                              style={{ color: "var(--success)" }}
-                              onClick={() => handleConvertToSale(prop)}
-                              title="Teklifi Kabul Et & Satış Terminaline Aktar"
-                              aria-label="Satışa Dönüştür"
-                            >
-                              <ShoppingCart size={15} />
-                            </button>
-                          )}
-
-                          {/* Düzenle */}
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-icon btn-sm"
-                            onClick={() => handleOpenEditModal(prop)}
-                            title="Teklifi Düzenle"
-                            aria-label="Düzenle"
-                          >
-                            <Edit size={15} />
-                          </button>
-
-                          {/* Sil */}
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-icon btn-sm"
-                            style={{ color: "var(--danger)" }}
-                            onClick={() => handleDeleteProposal(prop)}
-                            title="Teklifi Sil"
-                            aria-label="Sil"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        {/* Sil */}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-icon btn-sm"
+                          style={{ color: "var(--danger)" }}
+                          onClick={() => handleDeleteProposal(prop)}
+                          title="Teklifi Sil"
+                          aria-label="Sil"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </section>
 
-      {/* --- YENİ TEKLİF / TEKLİF DÜZENLEME MODALI --- */}
+      {/* --- FERAH VE TAM EKRANA UYGUN TEKLİF HAZIRLAMA MODALI --- */}
       {showModal && (
-        <div className="modal-overlay" style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
-          <div className="modal-content animate-slide-up" style={{ maxWidth: "850px", width: "100%", maxHeight: "92vh", display: "flex", flexDirection: "column", backgroundColor: "var(--bg-secondary)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-xl)" }}>
-            
+        <div
+          className="modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            backgroundColor: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem"
+          }}
+        >
+          <div
+            className="modal-content animate-slide-up"
+            style={{
+              width: "96vw",
+              maxWidth: "1050px",
+              maxHeight: "94vh",
+              display: "flex",
+              flexDirection: "column",
+              backgroundColor: "var(--bg-secondary)",
+              borderRadius: "var(--radius-lg)",
+              boxShadow: "var(--shadow-xl)",
+              overflow: "hidden"
+            }}
+          >
             {/* Modal Header */}
-            <div className="modal-header" style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div
+              style={{
+                padding: "1rem 1.5rem",
+                borderBottom: "1px solid var(--border-color)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                backgroundColor: "var(--bg-tertiary)"
+              }}
+            >
               <div>
-                <h3 style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0 }}>
-                  {modalMode === "add" ? "Yeni Teklif Mektubu Hazırla" : "Teklif Mektubunu Düzenle"}
+                <h3 style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <FileText size={18} className="text-primary" />
+                  <span>{modalMode === "add" ? "Yeni Teklif Mektubu Hazırla" : "Teklif Mektubunu Düzenle"}</span>
                 </h3>
-                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                  Özkon Yapı antetli, inşaat/malzeme ve nakliye kalemli teklif mektubu
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                  Özkon Yapı antetli resmi A4 teklif çıktısı için bilgileri doldurun.
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} style={{ cursor: "pointer", fontSize: "1.5rem", background: "none", border: "none", color: "var(--text-muted)" }}>&times;</button>
+              <button
+                onClick={() => setShowModal(false)}
+                style={{ cursor: "pointer", fontSize: "1.4rem", background: "none", border: "none", color: "var(--text-muted)" }}
+              >
+                &times;
+              </button>
             </div>
 
             {/* Modal Body */}
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, overflowY: "auto" }}>
-              <div className="modal-body" style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div style={{ padding: "1.25rem 1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
                 
-                {/* 1. Kısım: Müşteri Bilgileri & Tarihler */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }} className="grid-cols-2">
+                {/* 1. Kısım: Müşteri & Tarihler (Kompakt 2 Sütun) */}
+                <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: "1rem" }} className="grid-cols-2">
                   
-                  {/* Sol: Müşteri */}
-                  <div className="card" style={{ padding: "1rem", backgroundColor: "var(--bg-tertiary)", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                    <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--primary)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <User size={15} />
+                  {/* Sol: Müşteri Bilgileri */}
+                  <div className="card" style={{ padding: "0.85rem 1rem", backgroundColor: "var(--bg-tertiary)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <div style={{ fontWeight: 700, fontSize: "0.8rem", color: "var(--primary)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <User size={14} />
                       <span>Müşteri Bilgileri</span>
-                    </div>
-
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" style={{ fontSize: "0.75rem" }}>Kayıtlı Müşteri Seçin</label>
-                      <select
-                        className="form-control"
-                        value={proposalForm.customerId}
-                        onChange={(e) => handleCustomerSelect(e.target.value)}
-                        style={{ fontSize: "0.85rem" }}
-                      >
-                        <option value="">-- Yeni / Serbest Müşteri --</option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.company} ({c.name})
-                          </option>
-                        ))}
-                      </select>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Firma / Ünvan *</label>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Kayıtlı Müşteri Seç</label>
+                        <select
+                          className="form-control"
+                          value={proposalForm.customerId}
+                          onChange={(e) => handleCustomerSelect(e.target.value)}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
+                        >
+                          <option value="">-- Serbest Müşteri Girişi --</option>
+                          {customers.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.company} ({c.name})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Firma / Ünvan *</label>
                         <input
                           type="text"
                           className="form-control"
@@ -698,167 +623,145 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
                           value={proposalForm.customerCompany}
                           onChange={(e) => setProposalForm({ ...proposalForm, customerCompany: e.target.value })}
                           required
-                          style={{ fontSize: "0.85rem" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
                         />
                       </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>İlgili Kişi</label>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>İlgili Kişi</label>
                         <input
                           type="text"
                           className="form-control"
                           placeholder="Örn: Recep Bey"
                           value={proposalForm.customerName}
                           onChange={(e) => setProposalForm({ ...proposalForm, customerName: e.target.value })}
-                          style={{ fontSize: "0.85rem" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
                         />
                       </div>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Telefon</label>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Telefon</label>
                         <input
                           type="text"
                           className="form-control"
                           placeholder="0543..."
                           value={proposalForm.customerPhone}
                           onChange={(e) => setProposalForm({ ...proposalForm, customerPhone: e.target.value })}
-                          style={{ fontSize: "0.85rem" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
                         />
                       </div>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Şantiye / Adres</label>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Şantiye / Adres</label>
                         <input
                           type="text"
                           className="form-control"
-                          placeholder="Karaman Merkez..."
+                          placeholder="Karaman..."
                           value={proposalForm.customerAddress}
                           onChange={(e) => setProposalForm({ ...proposalForm, customerAddress: e.target.value })}
-                          style={{ fontSize: "0.85rem" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Sağ: Teklif Meta Bilgileri */}
-                  <div className="card" style={{ padding: "1rem", backgroundColor: "var(--bg-tertiary)", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                    <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "var(--primary)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <Calendar size={15} />
+                  {/* Sağ: Tarih & Yetkili */}
+                  <div className="card" style={{ padding: "0.85rem 1rem", backgroundColor: "var(--bg-tertiary)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <div style={{ fontWeight: 700, fontSize: "0.8rem", color: "var(--primary)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <Calendar size={14} />
                       <span>Tarih & Yetkili Bilgileri</span>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Teklif Tarihi</label>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Teklif Tarihi</label>
                         <input
                           type="date"
                           className="form-control"
                           value={proposalForm.date}
                           onChange={(e) => setProposalForm({ ...proposalForm, date: e.target.value })}
                           required
-                          style={{ fontSize: "0.85rem" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
                         />
                       </div>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Son Geçerlilik</label>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Son Geçerlilik</label>
+                          <div style={{ display: "flex", gap: "0.2rem" }}>
+                            <button type="button" className="btn btn-secondary btn-sm" style={{ padding: "0.05rem 0.25rem", fontSize: "0.65rem" }} onClick={() => handleSetValidityDays(7)}>+7G</button>
+                            <button type="button" className="btn btn-secondary btn-sm" style={{ padding: "0.05rem 0.25rem", fontSize: "0.65rem" }} onClick={() => handleSetValidityDays(15)}>+15G</button>
+                            <button type="button" className="btn btn-secondary btn-sm" style={{ padding: "0.05rem 0.25rem", fontSize: "0.65rem" }} onClick={() => handleSetValidityDays(30)}>+30G</button>
+                          </div>
+                        </div>
                         <input
                           type="date"
                           className="form-control"
                           value={proposalForm.validUntil}
                           onChange={(e) => setProposalForm({ ...proposalForm, validUntil: e.target.value })}
                           required
-                          style={{ fontSize: "0.85rem" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
                         />
                       </div>
                     </div>
 
-                    {/* Hızlı Gün Butonları */}
-                    <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Hızlı Geçerlilik:</span>
-                      <button type="button" className="btn btn-secondary btn-sm" style={{ padding: "0.15rem 0.4rem", fontSize: "0.7rem" }} onClick={() => handleSetValidityDays(7)}>
-                        +7 Gün
-                      </button>
-                      <button type="button" className="btn btn-secondary btn-sm" style={{ padding: "0.15rem 0.4rem", fontSize: "0.7rem" }} onClick={() => handleSetValidityDays(15)}>
-                        +15 Gün
-                      </button>
-                      <button type="button" className="btn btn-secondary btn-sm" style={{ padding: "0.15rem 0.4rem", fontSize: "0.7rem" }} onClick={() => handleSetValidityDays(30)}>
-                        +30 Gün
-                      </button>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "0.2rem" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Yetkili Satışçı</label>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Yetkili Satışçı</label>
                         <input
                           type="text"
                           className="form-control"
-                          value={user.displayName || "Abdullah Mete"}
+                          value={user?.displayName || "Abdullah Mete"}
                           readOnly
                           disabled
-                          style={{ fontSize: "0.85rem", backgroundColor: "var(--bg-secondary)" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem", backgroundColor: "var(--bg-secondary)" }}
                         />
                       </div>
                       <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Yetkili İletişim Tel</label>
+                        <label className="form-label" style={{ fontSize: "0.7rem", marginBottom: "0.2rem" }}>Yetkili İletişim Tel</label>
                         <input
                           type="text"
                           className="form-control"
-                          placeholder="0543 834 87 68"
+                          placeholder="0543..."
                           value={proposalForm.salespersonPhone}
                           onChange={(e) => setProposalForm({ ...proposalForm, salespersonPhone: e.target.value })}
-                          style={{ fontSize: "0.85rem" }}
+                          style={{ fontSize: "0.8rem", padding: "0.3rem 0.5rem" }}
                         />
                       </div>
-                    </div>
-
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" style={{ fontSize: "0.75rem" }}>Teklif Durumu</label>
-                      <select
-                        className="form-control"
-                        value={proposalForm.status}
-                        onChange={(e) => setProposalForm({ ...proposalForm, status: e.target.value as ProposalStatus })}
-                        style={{ fontSize: "0.85rem" }}
-                      >
-                        <option value="sent">Gönderildi</option>
-                        <option value="draft">Taslak</option>
-                        <option value="accepted">Kabul Edildi</option>
-                        <option value="rejected">Reddedildi</option>
-                      </select>
                     </div>
                   </div>
                 </div>
 
                 {/* 2. Kısım: Kalemler Tablosu */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontWeight: 700, fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <Layers size={16} className="text-primary" />
-                      <span>Ürün / Hizmet Kalemleri</span>
+                    <div style={{ fontWeight: 700, fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <Layers size={15} className="text-primary" />
+                      <span>Teklif Kalemleri (Ürün / Malzeme / Nakliye)</span>
                     </div>
 
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
                       onClick={handleAddItem}
-                      style={{ padding: "0.3rem 0.65rem", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.3rem" }}
+                      style={{ padding: "0.25rem 0.6rem", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.3rem" }}
                     >
-                      <Plus size={14} />
-                      <span>+ Kalem Satırı Ekle</span>
+                      <Plus size={13} />
+                      <span>+ Satır Ekle</span>
                     </button>
                   </div>
 
-                  <div className="table-container" style={{ border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)" }}>
-                    <table className="table" style={{ fontSize: "0.85rem" }}>
-                      <thead style={{ backgroundColor: "var(--bg-tertiary)" }}>
+                  <div className="table-container" style={{ border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)", maxHeight: "240px", overflowY: "auto" }}>
+                    <table className="table" style={{ fontSize: "0.8rem", margin: 0 }}>
+                      <thead style={{ backgroundColor: "var(--bg-tertiary)", position: "sticky", top: 0, zIndex: 1 }}>
                         <tr>
-                          <th style={{ width: "35px", textAlign: "center" }}>#</th>
-                          <th style={{ minWidth: "160px" }}>Stoktan Seç (Opsiyonel)</th>
+                          <th style={{ width: "30px", textAlign: "center" }}>#</th>
+                          <th style={{ width: "170px" }}>Stoktan Seç</th>
                           <th style={{ minWidth: "200px" }}>Ürün / Hizmet Açıklaması *</th>
-                          <th style={{ width: "90px", textAlign: "center" }}>Miktar *</th>
-                          <th style={{ width: "95px" }}>Birim</th>
-                          <th style={{ width: "115px", textAlign: "right" }}>B. Fiyat (₺) *</th>
-                          <th style={{ width: "115px", textAlign: "right" }}>Toplam (₺)</th>
-                          <th style={{ width: "40px" }}></th>
+                          <th style={{ width: "85px", textAlign: "center" }}>Miktar *</th>
+                          <th style={{ width: "90px" }}>Birim</th>
+                          <th style={{ width: "110px", textAlign: "right" }}>B. Fiyat (₺) *</th>
+                          <th style={{ width: "110px", textAlign: "right" }}>Toplam (₺)</th>
+                          <th style={{ width: "35px" }}></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -868,7 +771,7 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
                             <td>
                               <select
                                 className="form-control"
-                                style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
+                                style={{ fontSize: "0.75rem", padding: "0.2rem 0.4rem" }}
                                 value={item.productId || ""}
                                 onChange={(e) => handleSelectProductToItem(idx, e.target.value)}
                               >
@@ -884,11 +787,11 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
                               <input
                                 type="text"
                                 className="form-control"
-                                placeholder="Örn: 20 LİK BİMS 11 PALET veya NAKLİYE"
+                                placeholder="Örn: 20 LİK BİMS veya NAKLİYE"
                                 value={item.description}
                                 onChange={(e) => handleItemChange(idx, "description", e.target.value)}
                                 required
-                                style={{ fontSize: "0.85rem", padding: "0.25rem 0.5rem" }}
+                                style={{ fontSize: "0.8rem", padding: "0.2rem 0.4rem" }}
                               />
                             </td>
                             <td>
@@ -900,7 +803,7 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
                                 value={item.quantity}
                                 onChange={(e) => handleItemChange(idx, "quantity", e.target.value)}
                                 required
-                                style={{ fontSize: "0.85rem", textAlign: "center", padding: "0.25rem 0.4rem" }}
+                                style={{ fontSize: "0.8rem", textAlign: "center", padding: "0.2rem 0.3rem" }}
                               />
                             </td>
                             <td>
@@ -908,7 +811,7 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
                                 className="form-control"
                                 value={item.unit || "ADET"}
                                 onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
-                                style={{ fontSize: "0.8rem", padding: "0.25rem 0.4rem" }}
+                                style={{ fontSize: "0.75rem", padding: "0.2rem 0.3rem" }}
                               >
                                 {UNIT_OPTIONS.map((u) => (
                                   <option key={u} value={u}>
@@ -926,20 +829,20 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
                                 value={item.price}
                                 onChange={(e) => handleItemChange(idx, "price", e.target.value)}
                                 required
-                                style={{ fontSize: "0.85rem", textAlign: "right", padding: "0.25rem 0.5rem" }}
+                                style={{ fontSize: "0.8rem", textAlign: "right", padding: "0.2rem 0.4rem" }}
                               />
                             </td>
-                            <td style={{ textAlign: "right", fontWeight: 700 }}>
+                            <td style={{ textAlign: "right", fontWeight: 700, fontSize: "0.85rem" }}>
                               {formatCurrency(item.total || item.quantity * item.price)}
                             </td>
                             <td style={{ textAlign: "center" }}>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveItem(idx)}
-                                style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", padding: "0.25rem" }}
+                                style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", padding: "0.2rem" }}
                                 title="Satırı Sil"
                               >
-                                <Trash2 size={15} />
+                                <Trash2 size={14} />
                               </button>
                             </td>
                           </tr>
@@ -951,48 +854,46 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
 
                 {/* 3. Kısım: Notlar ve Finansal Özet */}
                 <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1rem" }} className="grid-cols-2">
-                  {/* Sol: Notlar & Şartlar */}
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontSize: "0.8rem", fontWeight: 600 }}>
+                    <label className="form-label" style={{ fontSize: "0.75rem", fontWeight: 600, marginBottom: "0.2rem" }}>
                       Notlar & Satış Şartları (PDF Altında Gözükür)
                     </label>
                     <textarea
                       className="form-control"
-                      rows={4}
+                      rows={3}
                       value={proposalForm.termsAndConditions}
                       onChange={(e) => setProposalForm({ ...proposalForm, termsAndConditions: e.target.value })}
-                      style={{ fontSize: "0.8rem", resize: "vertical" }}
+                      style={{ fontSize: "0.75rem", resize: "vertical" }}
                       placeholder="Teslimat yeri, nakliye durumu, ödeme şartları..."
                     />
                   </div>
 
-                  {/* Sağ: Finansal Özet Kartı */}
-                  <div className="card" style={{ padding: "1rem", backgroundColor: "var(--bg-tertiary)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                  <div className="card" style={{ padding: "0.75rem 1rem", backgroundColor: "var(--bg-tertiary)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem" }}>
                       <span style={{ color: "var(--text-secondary)" }}>Ara Toplam:</span>
                       <span style={{ fontWeight: 600 }}>{formatCurrency(subtotal)}</span>
                     </div>
 
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem" }}>
                       <span style={{ color: "var(--text-secondary)" }}>İskonto / İndirim:</span>
                       <input
                         type="number"
                         min="0"
                         className="form-control"
-                        style={{ width: "100px", padding: "0.2rem 0.4rem", textAlign: "right", fontSize: "0.85rem" }}
+                        style={{ width: "90px", padding: "0.15rem 0.35rem", textAlign: "right", fontSize: "0.8rem" }}
                         value={proposalForm.discountAmount}
                         onChange={(e) => setProposalForm({ ...proposalForm, discountAmount: parseFloat(e.target.value) || 0 })}
                       />
                     </div>
 
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem" }}>
                       <span style={{ color: "var(--text-secondary)" }}>Hesaplanan KDV (%20):</span>
                       <span style={{ fontWeight: 600 }}>{formatCurrency(taxAmount)}</span>
                     </div>
 
-                    <div style={{ borderTop: "2px solid var(--border-color)", paddingTop: "0.5rem", marginTop: "0.25rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontWeight: 800, fontSize: "1rem" }}>GENEL TOPLAM:</span>
-                      <span style={{ fontWeight: 800, fontSize: "1.2rem", color: "var(--primary)" }}>
+                    <div style={{ borderTop: "2px solid var(--border-color)", paddingTop: "0.4rem", marginTop: "0.2rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontWeight: 800, fontSize: "0.9rem" }}>GENEL TOPLAM:</span>
+                      <span style={{ fontWeight: 800, fontSize: "1.1rem", color: "var(--primary)" }}>
                         {formatCurrency(totalAmount)}
                       </span>
                     </div>
@@ -1002,13 +903,22 @@ Detaylı bilgi ve onay için bize ulaşabilirsiniz.`;
               </div>
 
               {/* Modal Footer */}
-              <div className="modal-footer" style={{ padding: "1rem 1.5rem", borderTop: "1px solid var(--border-color)", display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+              <div
+                style={{
+                  padding: "0.85rem 1.5rem",
+                  borderTop: "1px solid var(--border-color)",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "0.75rem",
+                  backgroundColor: "var(--bg-tertiary)"
+                }}
+              >
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                   İptal
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <CheckCircle2 size={16} />
-                  <span>{submitting ? "Kaydediliyor..." : modalMode === "add" ? "Teklifi Oluştur & Kaydet" : "Teklifi Güncelle"}</span>
+                  <Download size={16} />
+                  <span>{submitting ? "Kaydediliyor..." : modalMode === "add" ? "Teklifi Kaydet & PDF İndir" : "Teklifi Güncelle & PDF İndir"}</span>
                 </button>
               </div>
             </form>
