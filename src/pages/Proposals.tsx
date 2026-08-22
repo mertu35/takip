@@ -153,8 +153,12 @@ const Proposals = () => {
     setShowModal(true);
   };
 
-  // Teklif Düzenle Modalı Aç
+  // Teklif Düzenle Modalı Aç (Sadece Admin / Patron açabilir)
   const handleOpenEditModal = (prop: Proposal) => {
+    if (user?.role === "sales") {
+      showToast("Güvenlik Kısıtlaması: Teklif mektupları kaydedildikten sonra satış elemanları tarafından düzenlenemez. Yalnızca Yönetici (Patron) düzenleyebilir.", "warning");
+      return;
+    }
     setModalMode("edit");
     setSelectedProposalId(prop.id);
     setProposalForm({
@@ -334,6 +338,11 @@ const Proposals = () => {
 
   // Teklif Sil
   const handleDeleteProposal = async (prop: Proposal) => {
+    if (user?.role === "sales") {
+      showToast("Güvenlik Kısıtlaması: Teklif mektupları satış elemanları tarafından silinemez.", "warning");
+      return;
+    }
+
     if (!window.confirm(`"${prop.proposalNo}" numaralı teklif mektubunu silmek istediğinize emin misiniz?`)) {
       return;
     }
@@ -492,28 +501,32 @@ ${itemsList}
                           <MessageCircle size={15} />
                         </button>
 
-                        {/* Düzenle */}
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-icon btn-sm"
-                          onClick={() => handleOpenEditModal(prop)}
-                          title="Teklifi Düzenle"
-                          aria-label="Düzenle"
-                        >
-                          <Edit size={15} />
-                        </button>
+                        {/* Düzenle (Sadece Yönetici / Patron) */}
+                        {(user?.role === "admin" || user?.role === "sysadmin") && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-icon btn-sm"
+                            onClick={() => handleOpenEditModal(prop)}
+                            title="Yönetici: Teklifi Düzenle"
+                            aria-label="Düzenle"
+                          >
+                            <Edit size={15} />
+                          </button>
+                        )}
 
-                        {/* Sil */}
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-icon btn-sm"
-                          style={{ color: "var(--danger)" }}
-                          onClick={() => handleDeleteProposal(prop)}
-                          title="Teklifi Sil"
-                          aria-label="Sil"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {/* Sil (Sadece Yönetici / Patron) */}
+                        {(user?.role === "admin" || user?.role === "sysadmin") && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-icon btn-sm"
+                            style={{ color: "var(--danger)" }}
+                            onClick={() => handleDeleteProposal(prop)}
+                            title="Yönetici: Teklifi Sil"
+                            aria-label="Sil"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

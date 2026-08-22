@@ -148,6 +148,10 @@ const firebaseProposalsRepository: ProposalsRepository = {
   },
 
   async update(id, updatedFields, actor) {
+    if (actor.currentUserRole === "sales") {
+      throw new Error("Güvenlik Kısıtlaması: Teklif mektupları oluşturulduktan sonra satış elemanları tarafından düzenlenemez. Yalnızca Yönetici (Patron) düzenleyebilir.");
+    }
+
     const docRef = doc(firestore!, "proposals", id);
     const snap = await getDoc(docRef);
     if (!snap.exists()) throw new Error("Teklif bulunamadı!");
@@ -191,6 +195,10 @@ const firebaseProposalsRepository: ProposalsRepository = {
   },
 
   async remove(id, actor) {
+    if (actor.currentUserRole === "sales") {
+      throw new Error("Güvenlik Kısıtlaması: Satış elemanları oluşturulmuş teklifleri silemez. Yalnızca Yönetici (Patron) silebilir.");
+    }
+
     const docRef = doc(firestore!, "proposals", id);
     const snap = await getDoc(docRef);
     const proposalNo = snap.exists() ? (snap.data() as Proposal).proposalNo : id;

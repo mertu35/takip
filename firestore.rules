@@ -67,10 +67,10 @@ service cloud.firestore {
     }
 
     // --- PROPOSALS KOLEKSİYONU (Teklif Mektupları) ---
+    // Güvenlik & Manipülasyon Önlemi: Satışçılar teklif oluşturabilir fakat sonradan düzenleyemez/silemez.
     match /proposals/{proposalId} {
       allow read, create: if isSignedIn();
-      allow update: if isSignedIn() && (isAdminOrSysadmin() || resource.data.salespersonId == request.auth.uid);
-      allow delete: if isSignedIn() && (isAdminOrSysadmin() || resource.data.salespersonId == request.auth.uid);
+      allow update, delete: if isSignedIn() && isAdminOrSysadmin();
     }
 
     // --- APPROVALS KOLEKSİYONU ---
