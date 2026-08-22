@@ -120,6 +120,20 @@ const Sales = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [salesHistory, setSalesHistory] = useState<Sale[]>([]);
+
+  // Geçmiş satışlarda kaç aylık kaydın SUNUCUDAN İNDİRİLECEĞİ.
+  // (Aşağıdaki showAllHistory ise inen kayıtların kaçının ekranda
+  // gösterileceğini belirler — ikisi farklı şeyler.)
+  // Varsayılan 3 ay: Firestore her dokümanı ayrı okuma saydığı için tüm
+  // geçmişi her açılışta indirmek gereksiz maliyet oluşturuyordu.
+  const [historyMonths, setHistoryMonths] = useState<number | null>(3);
+
+  const historySince = useMemo(() => {
+    if (historyMonths === null) return null;
+    const d = new Date();
+    d.setMonth(d.getMonth() - historyMonths);
+    return d;
+  }, [historyMonths]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
@@ -294,7 +308,7 @@ const Sales = () => {
       const [custData, prodData, salesData, profileData] = await Promise.all([
         getCustomers(),
         getProducts(),
-        getSales(user?.role, user?.uid),
+        getSales(user?.role, user?.uid, historySince ? { since: historySince.toISOString() } : undefined),
         getCompanyProfile()
       ]);
       setCustomers(custData);
@@ -346,7 +360,7 @@ const Sales = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.role, user?.uid, showToast]);
+  }, [user?.role, user?.uid, showToast, historySince]);
 
   const handleRepeatSale = useCallback((sale: Sale) => {
     setSelectedCustomerId(sale.customerId);
@@ -1224,17 +1238,37 @@ const Sales = () => {
         {/* Geçmiş Satışlar ve Fiş Tekrar Yazdırma */}
         <section className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Son Satışlarınız ({salesHistory.length})</h3>
-            {salesHistory.length > 5 && (
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 600 }}>
+              Son Satışlarınız ({salesHistory.length})
+              <span style={{ fontSize: "0.78rem", fontWeight: 500, color: "var(--text-muted)", marginLeft: "0.5rem" }}>
+                {historyMonths === null ? "· tüm geçmiş" : `· son ${historyMonths} ay`}
+              </span>
+            </h3>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              {salesHistory.length > 5 && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAllHistory(!showAllHistory)}
+                  style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}
+                >
+                  {showAllHistory ? "Son 5 Kaydı Göster" : "Tümünü Göster"}
+                </button>
+              )}
+              {/* Yukarıdaki düğme inen kayıtların GÖSTERİMİNİ değiştirir;
+                  bu düğme sunucudan kaç aylık kaydın İNDİRİLECEĞİNİ değiştirir. */}
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => setShowAllHistory(!showAllHistory)}
+                onClick={() => setHistoryMonths(historyMonths === null ? 3 : null)}
                 style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem" }}
+                title={historyMonths === null
+                  ? "Yalnızca son 3 ayı yükle (daha hızlı)"
+                  : "Daha eski kayıtları da sunucudan getir"}
               >
-                {showAllHistory ? "Son 5 Kaydı Göster" : "Tümünü Göster"}
+                {historyMonths === null ? "Son 3 Aya Dön" : "Daha Eskisini Yükle"}
               </button>
-            )}
+            </div>
           </div>
 
           <div className="table-container" style={{ maxHeight: "250px", overflowY: "auto" }}>
