@@ -1,5 +1,6 @@
 // Takip Sistemi - Teklif Mektubu & Çıktı Arşivi (Proposals)
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   getProposals,
   addProposal,
@@ -537,14 +538,14 @@ ${itemsList}
         )}
       </section>
 
-      {/* --- FERAH VE TAM EKRANA UYGUN TEKLİF HAZIRLAMA MODALI --- */}
-      {showModal && (
+      {/* --- FERAH VE TAM EKRANA UYGUN TEKLİF HAZIRLAMA MODALI (PORTAL) --- */}
+      {showModal && typeof document !== "undefined" && createPortal(
         <div
           className="modal-overlay"
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 1000,
+            zIndex: 99999,
             backgroundColor: "rgba(0,0,0,0.75)",
             backdropFilter: "blur(4px)",
             display: "flex",
@@ -937,7 +938,8 @@ ${itemsList}
             </form>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

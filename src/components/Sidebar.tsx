@@ -95,9 +95,8 @@ const Sidebar = ({ onOpenProfile }: SidebarProps) => {
       >
         <div className="sidebar-logo" style={{ justifyContent: collapsed ? "center" : "space-between" }}>
           {!collapsed && (
-            <Link to="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }} aria-label="Ana Sayfa">
-              <img src="/logo.svg" alt="Özkon Yapı Logo" style={{ height: "28px", objectFit: "contain", display: "block" }} />
-              <span className="brand-title" style={{ fontSize: "1rem", color: "var(--primary)" }}>ÖZKON YAPI</span>
+            <Link to="/" style={{ display: "flex", alignItems: "center", textDecoration: "none" }} aria-label="Ana Sayfa">
+              <img src="/logo.svg" alt="Özkon Yapı Logo" style={{ height: "30px", objectFit: "contain", display: "block" }} />
             </Link>
           )}
           {collapsed && (
