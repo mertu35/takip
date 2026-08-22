@@ -19,6 +19,15 @@ service cloud.firestore {
       return getUserRole() == 'admin' || getUserRole() == 'sysadmin';
     }
 
+    // Kullanıcının kendi profil dokümanı (log kaydının kimlik alanlarını
+    // istemcinin iddiasına değil, sunucudaki gerçek kayda bağlamak için).
+    function hasProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     // --- USERS KOLEKSİYONU ---
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -101,9 +110,26 @@ service cloud.firestore {
     }
 
     // --- LOGS KOLEKSİYONU (Değiştirilemez Denetim İzi) ---
+    // Denetim izi ancak sahtesi yazılamıyorsa kanıt değeri taşır. Log kaydının
+    // KİMLİK alanları (userId / userName / userRole) istemciden geliyor; bunlar
+    // doğrulanmazsa bir kullanıcı kendi oturumuyla başkasının adına veya daha
+    // yetkili bir rol adına kayıt üretebilir.
+    //
+    // Bu yüzden üç alan da sunucudaki gerçek profil kaydına bağlanıyor:
+    //   userId   -> oturumun uid'i
+    //   userRole -> users dokümanındaki gerçek rol
+    //   userName -> users dokümanındaki gerçek displayName
+    //
+    // displayName alanı bir profilde eksikse kayıt engellenmesin diye
+    // get(...) varsayılanı olarak istemcinin gönderdiği değer kabul edilir;
+    // aksi halde log sessizce düşerdi (logsRepository hatayı yutuyor).
     match /logs/{logId} {
       allow read: if isSignedIn() && isAdminOrSysadmin();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && hasProfile()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.userRole == profile().role
+        && request.resource.data.userName == profile().get('displayName', request.resource.data.userName);
       allow update, delete: if false;
     }
 
