@@ -55,7 +55,12 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         isAdminOrSysadmin() ||
         getUserRole() == 'accounting' ||
-        resource.data.salespersonId == request.auth.uid
+        (
+          resource.data.salespersonId == request.auth.uid &&
+          resource.data.status == 'pending_accounting' &&
+          request.resource.data.status == 'pending_accounting' &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'accountingProcessed', 'processedAt', 'processedBy', 'receiptNo'])
+        )
       );
       allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
@@ -75,13 +80,15 @@ service cloud.firestore {
 
     // --- APPROVALS KOLEKSİYONU ---
     match /approvals/{approvalId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (isAdminOrSysadmin() || getUserRole() == 'accounting');
+      allow update, delete: if false;
     }
 
-    // --- LOGS KOLEKSİYONU ---
+    // --- LOGS KOLEKSİYONU (Değiştirilemez Denetim İzi) ---
     match /logs/{logId} {
       allow read: if isSignedIn() && isAdminOrSysadmin();
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
 

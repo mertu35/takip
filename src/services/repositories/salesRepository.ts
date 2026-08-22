@@ -223,6 +223,10 @@ const firebaseSalesRepository: SalesRepository = {
   },
 
   async processApproval(saleId, status, notes, isMicroProcessed, actor) {
+    if (actor.currentUserRole !== "admin" && actor.currentUserRole !== "sysadmin" && actor.currentUserRole !== "accounting") {
+      throw new Error("Yetkisiz İşlem: Satış fişi onaylama ve reddetme yetkisi sadece Muhasebe ve Yönetici personeline aittir!");
+    }
+
     const docRef = doc(firestore!, "sales", saleId);
     const approvalData = {
       status,
@@ -487,6 +491,10 @@ const mockSalesRepository: SalesRepository = {
   },
 
   async processApproval(saleId, status, notes, isMicroProcessed, actor) {
+    if (actor.currentUserRole !== "admin" && actor.currentUserRole !== "sysadmin" && actor.currentUserRole !== "accounting") {
+      throw new Error("Yetkisiz İşlem: Satış fişi onaylama ve reddetme yetkisi sadece Muhasebe ve Yönetici personeline aittir!");
+    }
+
     const sales = getLocalData<Sale>("takip_sales");
     const idx = sales.findIndex((s) => s.id === saleId);
     if (idx === -1) throw new Error("Satış kaydı bulunamadı!");
