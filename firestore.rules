@@ -37,15 +37,30 @@ service cloud.firestore {
     }
 
     // --- PRODUCTS KOLEKSİYONU ---
+    // İş kuralı: ürün kartını (ekleme, fiyat, isim, kod) SATIŞÇI yönetir.
+    // Muhasebe stoğu, satışları ve fiyatları GÖRÜR ama ürüne dokunamaz.
+    //
+    // Tek istisna 'stock' alanı: muhasebeci onay/red ve "Miktarları Düzenle"
+    // işlemlerinde stoğu değiştirmek zorunda. Bu yüzden stok yazması role
+    // değil ALANA bağlı olarak herkese açık; diğer tüm alanlar satışçı ve
+    // yöneticiyle sınırlı.
     match /products/{productId} {
-      allow read, create, update: if isSignedIn();
-      // Ürünü tamamen silme yetkisi yalnızca yöneticilere aittir
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (getUserRole() == 'sales' || isAdminOrSysadmin());
+      allow update: if isSignedIn() && (
+        getUserRole() == 'sales' ||
+        isAdminOrSysadmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock'])
+      );
       allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
 
     // --- CATEGORIES KOLEKSİYONU ---
+    // Kategoriler ürün kartının parçası olduğu için ürünle aynı yetkide:
+    // satışçı yönetir, muhasebe yalnızca görür.
     match /categories/{categoryId} {
-      allow read, create, update: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (getUserRole() == 'sales' || isAdminOrSysadmin());
       allow delete: if isSignedIn() && isAdminOrSysadmin();
     }
 

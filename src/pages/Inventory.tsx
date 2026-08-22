@@ -49,6 +49,16 @@ interface ImportResult {
 
 const Inventory = () => {
   const { user } = useAuth();
+
+  // İş kuralı: ürün kartını (ekleme, fiyat güncelleme) SATIŞÇI yönetir.
+  // Muhasebe stoğu/fiyatı görür ama değiştiremez, ilgili düğmeleri de görmez.
+  // Firestore kuralları bunu sunucu tarafında zaten zorunlu kılıyor; buradaki
+  // kontrol sadece kullanıcıyı izin hatası duvarına toslatmamak için.
+  const canManageProducts =
+    user?.role === "sales" || user?.role === "admin" || user?.role === "sysadmin";
+
+  // Ürünü tamamen silmek geri alınamaz olduğu için yalnızca yöneticide.
+  const canDeleteProducts = user?.role === "admin" || user?.role === "sysadmin";
   const { showToast } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -557,7 +567,7 @@ const Inventory = () => {
           </div>
 
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            {(user.role === "admin" || user.role === "sysadmin") && (
+            {canManageProducts && (
               <>
                 <button className="btn btn-secondary btn-sm" onClick={handleDownloadTemplate} title="Excel şablonu indir">
                   <FileSpreadsheet size={16} />
@@ -574,14 +584,18 @@ const Inventory = () => {
                 </label>
               </>
             )}
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowCategoryModal(true)}>
-              <FolderPlus size={16} />
-              <span>Kategori Ekle</span>
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={handleOpenAddProduct}>
-              <Plus size={16} />
-              <span>Yeni Ürün Ekle</span>
-            </button>
+            {canManageProducts && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowCategoryModal(true)}>
+                <FolderPlus size={16} />
+                <span>Kategori Ekle</span>
+              </button>
+            )}
+            {canManageProducts && (
+              <button className="btn btn-primary btn-sm" onClick={handleOpenAddProduct}>
+                <Plus size={16} />
+                <span>Yeni Ürün Ekle</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -780,22 +794,28 @@ const Inventory = () => {
                           >
                             <Printer size={16} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditProduct(p)}
-                            style={{ color: "var(--primary)", cursor: "pointer" }}
-                            title="Ürünü Düzenle"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteProduct(p.id, p.name)}
-                            style={{ color: "var(--danger)", cursor: "pointer" }}
-                            title="Ürünü Sil"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {canManageProducts && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditProduct(p)}
+                                style={{ color: "var(--primary)", cursor: "pointer" }}
+                                title="Ürünü Düzenle"
+                              >
+                                <Edit size={16} />
+                              </button>
+                              {canDeleteProducts && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteProduct(p.id, p.name)}
+                                  style={{ color: "var(--danger)", cursor: "pointer" }}
+                                  title="Ürünü Sil"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

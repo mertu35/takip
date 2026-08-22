@@ -52,9 +52,14 @@ jobs:
           fi
           echo "OK: Firebase yapilandirmasi pakete gomulu."
 
-      - name: Deploy to Firebase Hosting
+      # NOT: Eskiden burada yalnizca "--only hosting" vardi. Bu yuzden
+      # firestore.rules dosyasindaki guvenlik duzeltmeleri repoda duruyor ama
+      # canliya hic gitmiyordu; kurallar ancak elle "firebase deploy"
+      # calistirildiginda guncelleniyordu. Artik kod ile kurallar birlikte
+      # yayina gidiyor, ikisi arasinda kayma olusamaz.
+      - name: Deploy to Firebase Hosting & Firestore Rules
         uses: w9jds/firebase-action@v2.2.0
         with:
-          args: deploy --only hosting
+          args: deploy --only hosting,firestore:rules
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
