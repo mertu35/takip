@@ -7,6 +7,7 @@ import {
   updateProposal,
   deleteProposal,
   getCustomers,
+  addCustomer,
   getProducts,
   getCompanyProfile
 } from "../services/db";
@@ -309,8 +310,46 @@ const Proposals = () => {
 
     setSubmitting(true);
     try {
+      // Eğer serbest müşteri girildiyse, otomatik olarak Müşteriler listesine de ekle/bağla
+      let assignedCustId = proposalForm.customerId;
+      const targetCompany = proposalForm.customerCompany.trim();
+      const targetName = proposalForm.customerName.trim() || targetCompany;
+
+      if (!assignedCustId && (targetCompany || targetName)) {
+        const existingCust = customers.find(
+          (c) =>
+            (c.company && c.company.toLowerCase() === targetCompany.toLowerCase()) ||
+            (c.name && c.name.toLowerCase() === targetName.toLowerCase())
+        );
+
+        if (existingCust) {
+          assignedCustId = existingCust.id;
+        } else {
+          try {
+            const newCust = await addCustomer(
+              {
+                name: targetName,
+                company: targetCompany || targetName,
+                phone: proposalForm.customerPhone || "",
+                address: proposalForm.customerAddress || "",
+                email: "",
+                taxOffice: "",
+                taxNumber: ""
+              },
+              user.uid,
+              user.displayName,
+              user.role
+            );
+            assignedCustId = newCust.id;
+          } catch (custErr) {
+            console.warn("Otomatik müşteri kaydı atlandı:", custErr);
+          }
+        }
+      }
+
       const payload = {
         ...proposalForm,
+        customerId: assignedCustId || "",
         salespersonId: user.uid,
         salespersonName: user.displayName || "Yetkili Satışçı",
         items: validItems,

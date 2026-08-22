@@ -187,13 +187,15 @@ const Customers = () => {
     return map;
   }, [sales]);
 
-  const filtered = customers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.phone && c.phone.includes(searchQuery)) ||
-      (c.taxNumber && c.taxNumber.includes(searchQuery))
-  );
+  const filtered = customers.filter((c) => {
+    if (!c) return false;
+    const q = searchQuery.toLowerCase();
+    const nameMatch = (c.name || "").toLowerCase().includes(q);
+    const companyMatch = (c.company || "").toLowerCase().includes(q);
+    const phoneMatch = Boolean(c.phone && c.phone.includes(searchQuery));
+    const taxMatch = Boolean(c.taxNumber && c.taxNumber.includes(searchQuery));
+    return nameMatch || companyMatch || phoneMatch || taxMatch;
+  });
 
   const sortedCustomers = useMemo(() => {
     const list = [...filtered];
@@ -212,7 +214,9 @@ const Customers = () => {
         if (!db) return -1;
         return new Date(db).getTime() - new Date(da).getTime();
       }
-      return a.name.localeCompare(b.name, "tr");
+      const nameA = a.name || a.company || "";
+      const nameB = b.name || b.company || "";
+      return nameA.localeCompare(nameB, "tr");
     });
     return list;
   }, [filtered, sortBy, customerStats]);
