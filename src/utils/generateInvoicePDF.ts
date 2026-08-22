@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Sale, CompanyProfile } from "../types";
+import { OZKON_LOGO_BASE64 } from "./logoBase64";
 
 // Türkçe karakter dönüşümü (jsPDF Latin-1 encoding kullanır)
 const tr = (text?: string | null) =>
@@ -27,16 +28,20 @@ export const generateInvoicePDF = (sale: Sale, companyProfile?: CompanyProfile |
   const margin = 18;
 
   const companyName = tr(companyProfile?.companyName || "OZKON YAPI");
-  const address = tr(companyProfile?.address || "Merkez Mah. Celik Sanayi Bulvari No: 45 Sarıyer / Istanbul");
-  const phone = companyProfile?.phone || "0212 999 88 77";
+  const address = tr(companyProfile?.address || "Valide Sultan Mah. 100. Yil Cad. No:74/B Karaman-Merkez");
+  const phone = companyProfile?.phone || "0338 213 76 67";
   const fax = companyProfile?.fax;
-  const taxOffice = tr(companyProfile?.taxOffice || "Maslak");
-  const taxNumber = companyProfile?.taxNumber || "6540987654";
+  const taxOffice = tr(companyProfile?.taxOffice || "Karaman");
+  const taxNumber = companyProfile?.taxNumber || "7000074860";
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(15, 82, 186);
-  doc.text(companyName, margin, 22);
+  try {
+    doc.addImage(OZKON_LOGO_BASE64, "PNG", margin, 12, 40, 12.1);
+  } catch (e) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(15, 82, 186);
+    doc.text(companyName, margin, 22);
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);

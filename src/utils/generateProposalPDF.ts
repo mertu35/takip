@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Proposal, CompanyProfile } from "../types";
+import { OZKON_LOGO_BASE64 } from "./logoBase64";
 
 // Türkçe karakter desteği için güvenli dönüştürücü
 const tr = (text?: string | null) =>
@@ -38,25 +39,23 @@ export const generateProposalPDF = (
 
   // --- 1. ÜST BAŞLIK & ANTET ALANI ---
 
-  // Sol: Şirket Logo & Bilgileri
-  doc.setFillColor(30, 90, 160); // Özkon Royal Blue
-  doc.roundedRect(margin, 12, 10, 10, 2, 2, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text("O", margin + 2.8, 19.5);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.setTextColor(20, 45, 90);
-  doc.text(companyName, margin + 14, 17);
+  // Sol: Şirket Resmi Logosu (210x63 aspect ratio ~ 44mm x 13.3mm)
+  try {
+    doc.addImage(OZKON_LOGO_BASE64, "PNG", margin, 10, 44, 13.3);
+  } catch (e) {
+    // Fallback: Logo yüklenemezse şık tipografi
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(20, 45, 90);
+    doc.text(companyName, margin, 18);
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(80, 80, 80);
-  doc.text(address, margin + 14, 21.5);
-  doc.text(`TEL: ${phone}   FAX: ${fax}`, margin + 14, 25.5);
-  doc.text(`info@ozkongrup.com   VD: ${taxOffice} / VKN: ${taxNumber}`, margin + 14, 29.5);
+  doc.text(address, margin, 27.5);
+  doc.text(`TEL: ${phone}   FAX: ${fax}`, margin, 31.5);
+  doc.text(`info@ozkongrup.com   VD: ${taxOffice} / VKN: ${taxNumber}`, margin, 35.5);
 
   // Sağ: TEKLİF MEKTUBU Başlığı ve Meta Bilgileri
   const rightX = W - margin;

@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Customer, Sale, Payment, CompanyProfile } from "../types";
 import { PAYMENT_METHOD_LABELS } from "./salesMath";
+import { OZKON_LOGO_BASE64 } from "./logoBase64";
 
 // Türkçe karakter dönüşümü
 const tr = (text?: string | null) =>
@@ -47,22 +48,26 @@ export const generateStatementPDF = (
   const margin = 16;
 
   const companyName = tr(companyProfile?.companyName || "OZKON YAPI & CELIK");
-  const address = tr(companyProfile?.address || "Merkez Mah. Celik Sanayi Bulvari No: 45 Sarıyer / Istanbul");
-  const phone = companyProfile?.phone || "0212 999 88 77";
-  const taxOffice = tr(companyProfile?.taxOffice || "Maslak");
-  const taxNumber = companyProfile?.taxNumber || "6540987654";
+  const address = tr(companyProfile?.address || "Valide Sultan Mah. 100. Yil Cad. No:74/B Karaman-Merkez");
+  const phone = companyProfile?.phone || "0338 213 76 67";
+  const taxOffice = tr(companyProfile?.taxOffice || "Karaman");
+  const taxNumber = companyProfile?.taxNumber || "7000074860";
 
   // Başlık Alanı
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(15, 82, 186);
-  doc.text(companyName, margin, 20);
+  try {
+    doc.addImage(OZKON_LOGO_BASE64, "PNG", margin, 10, 40, 12.1);
+  } catch (e) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(15, 82, 186);
+    doc.text(companyName, margin, 20);
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text(address, margin, 25);
-  doc.text(`Tel: ${phone}  |  VD: ${taxOffice}  |  VN: ${taxNumber}`, margin, 29.5);
+  doc.text(address, margin, 26);
+  doc.text(`Tel: ${phone}  |  VD: ${taxOffice}  |  VN: ${taxNumber}`, margin, 30.5);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
