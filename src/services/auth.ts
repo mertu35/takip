@@ -23,12 +23,16 @@ const getLocalUsers = (): AppUser[] => {
     localStorage.setItem("takip_users", JSON.stringify(INITIAL_USERS));
     return INITIAL_USERS;
   }
-  // Yeni eklenen sistem kullanıcılarını (ör. ali.bilgin) mevcut listeye birleştir
+  // Yeni eklenen veya şifresi eksik kalmış sistem kullanıcılarını onar
   let updated = false;
   const merged = [...stored];
   for (const initUser of INITIAL_USERS) {
-    if (!merged.some((u) => u.email.toLowerCase() === initUser.email.toLowerCase())) {
+    const existing = merged.find((u) => u.email.toLowerCase() === initUser.email.toLowerCase());
+    if (!existing) {
       merged.push(initUser);
+      updated = true;
+    } else if (!existing.password && initUser.password) {
+      existing.password = initUser.password;
       updated = true;
     }
   }
@@ -116,8 +120,12 @@ export const login = async (email: string, password: string): Promise<AppUser> =
       throw new Error("Hesabınız devre dışı bırakılmıştır!");
     }
 
-    // Tek ve kesin şifre kontrolü
-    if (foundUser.password !== password) {
+    // Tek ve kesin şifre kontrolü (Kullanıcının değiştirdiği şifre veya başlangıç şifresi)
+    const expectedPassword =
+      foundUser.password ||
+      INITIAL_USERS.find((u) => u.email.toLowerCase() === foundUser.email.toLowerCase())?.password;
+
+    if (!expectedPassword || expectedPassword !== password) {
       throw new Error("Hatalı kullanıcı adı ya da şifre!");
     }
 
