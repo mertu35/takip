@@ -7,6 +7,7 @@ export const INITIAL_USERS: AppUser[] = [
     email: "sysadmin@takip.com",
     displayName: "Ahmet Sistem Yöneticisi",
     role: "sysadmin",
+    password: "sysadmin123",
     createdAt: new Date().toISOString()
   },
   {
@@ -14,6 +15,7 @@ export const INITIAL_USERS: AppUser[] = [
     email: "admin@takip.com",
     displayName: "Ömer Yönetici (Patron)",
     role: "admin",
+    password: "admin123",
     createdAt: new Date().toISOString()
   },
   {
@@ -21,6 +23,7 @@ export const INITIAL_USERS: AppUser[] = [
     email: "ali.bilgin@takip.com",
     displayName: "Ali Bilgin",
     role: "sales",
+    password: "123456",
     createdAt: new Date().toISOString()
   },
   {
@@ -28,6 +31,7 @@ export const INITIAL_USERS: AppUser[] = [
     email: "satis@takip.com",
     displayName: "Ali Satışçı",
     role: "sales",
+    password: "sales123",
     createdAt: new Date().toISOString()
   },
   {
@@ -35,6 +39,7 @@ export const INITIAL_USERS: AppUser[] = [
     email: "muhasebe@takip.com",
     displayName: "Canan Muhasebeci",
     role: "accounting",
+    password: "accounting123",
     createdAt: new Date().toISOString()
   }
 ];

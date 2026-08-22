@@ -55,112 +55,20 @@ const triggerMockAuthChange = (user: AppUser | null) => {
   mockAuthCallbacks.forEach((callback) => callback(user));
 };
 
-interface KnownAccount {
-  email: string;
-  role: Role;
-  displayName: string;
-  allowedPasswords: string[];
-}
-
-const KNOWN_ACCOUNTS: Record<string, KnownAccount> = {
-  admin: {
-    email: "admin@takip.com",
-    role: "admin",
-    displayName: "Ömer Yönetici (Patron)",
-    allowedPasswords: ["admin123", "123456", "admin", "admin35", "patron123"]
-  },
-  patron: {
-    email: "admin@takip.com",
-    role: "admin",
-    displayName: "Ömer Yönetici (Patron)",
-    allowedPasswords: ["admin123", "123456", "admin", "admin35", "patron123"]
-  },
-  sysadmin: {
-    email: "sysadmin@takip.com",
-    role: "sysadmin",
-    displayName: "Sistem Yöneticisi",
-    allowedPasswords: ["sysadmin123", "123456", "sysadmin", "sysadmin35"]
-  },
-  satis: {
-    email: "satis@takip.com",
-    role: "sales",
-    displayName: "Ali Satışçı",
-    allowedPasswords: ["sales123", "satis123", "123456", "satis", "satis35"]
-  },
-  "ali.bilgin": {
-    email: "ali.bilgin@takip.com",
-    role: "sales",
-    displayName: "Ali Bilgin",
-    allowedPasswords: ["123456", "sales123", "satis123", "ali123", "ali35"]
-  },
-  ali: {
-    email: "ali.bilgin@takip.com",
-    role: "sales",
-    displayName: "Ali Bilgin",
-    allowedPasswords: ["123456", "sales123", "satis123", "ali123", "ali35"]
-  },
-  muhasebe: {
-    email: "muhasebe@takip.com",
-    role: "accounting",
-    displayName: "Canan Muhasebeci",
-    allowedPasswords: ["accounting123", "muhasebe123", "123456", "muhasebe", "muhasebe35"]
-  }
-};
-
 export const login = async (email: string, password: string): Promise<AppUser> => {
-  const username = email.split("@")[0].toLowerCase().trim();
-  const known = KNOWN_ACCOUNTS[username];
+  const cleanInput = email.trim();
+  const targetEmail = cleanInput.includes("@") ? cleanInput.toLowerCase() : `${cleanInput.toLowerCase()}@takip.com`;
 
   if (isFirebaseActive) {
     try {
-      let userCredential: any;
-      const targetEmail = known ? known.email : email;
-
-      try {
-        userCredential = await signInWithEmailAndPassword(auth!, targetEmail, password);
-      } catch (firstErr: any) {
-        if (known && known.allowedPasswords.includes(password)) {
-          try {
-            userCredential = await createUserWithEmailAndPassword(auth!, targetEmail, password);
-          } catch (createErr: any) {
-            if (createErr.code === "auth/email-already-in-use") {
-              // Şifre varyasyonlarını dene
-              let signedIn = false;
-              for (const altPass of known.allowedPasswords) {
-                try {
-                  userCredential = await signInWithEmailAndPassword(auth!, targetEmail, altPass);
-                  signedIn = true;
-                  break;
-                } catch {
-                  // Sonraki varyasyonu dene
-                }
-              }
-              if (!signedIn) throw createErr;
-            } else {
-              throw createErr;
-            }
-          }
-        } else {
-          throw firstErr;
-        }
-      }
-
+      const userCredential = await signInWithEmailAndPassword(auth!, targetEmail, password);
       const uid = userCredential.user.uid;
       const userDocRef = doc(firestore!, "users", uid);
-      let userDoc = await getDoc(userDocRef);
+      const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
-        const role: Role = known ? known.role : email.includes("satis") || email.includes("ali") ? "sales" : email.includes("muhasebe") ? "accounting" : "admin";
-        const displayName = known ? known.displayName : "Özkon Yetkilisi";
-        const newProfile = {
-          uid,
-          email: userCredential.user.email || targetEmail,
-          displayName,
-          role,
-          createdAt: new Date().toISOString()
-        };
-        await setDoc(userDocRef, newProfile, { merge: true });
-        return newProfile;
+        await signOut(auth!);
+        throw new Error("Kullanıcı profil kaydı bulunamadı. Lütfen yöneticinizle iletişime geçin.");
       }
 
       const data = userDoc.data();
@@ -168,19 +76,22 @@ export const login = async (email: string, password: string): Promise<AppUser> =
         await signOut(auth!);
         throw new Error("Hesabınız devre dışı bırakılmıştır!");
       }
+
       return {
         uid,
         email: userCredential.user.email || targetEmail,
         ...(data as Omit<AppUser, "uid" | "email">)
       } as AppUser;
     } catch (fbErr: any) {
-      if (fbErr.code === "auth/invalid-credential" ||
-          fbErr.code === "auth/user-not-found" ||
-          fbErr.code === "auth/wrong-password" ||
-          fbErr.code === "auth/invalid-email") {
+      if (
+        fbErr.code === "auth/invalid-credential" ||
+        fbErr.code === "auth/user-not-found" ||
+        fbErr.code === "auth/wrong-password" ||
+        fbErr.code === "auth/invalid-email"
+      ) {
         throw new Error("Hatalı kullanıcı adı ya da şifre!");
       } else if (fbErr.code === "auth/too-many-requests") {
-        throw new Error("Çok fazla hatalı deneme yapıldı. Lütfen biraz bekleyin.");
+        throw new Error("Çok fazla hatalı deneme yapıldı. Lütfen biraz bekleyin veya şifrenizi sıfırlayın.");
       } else if (fbErr.code === "auth/network-request-failed") {
         throw new Error("İnternet bağlantısı hatası! Lütfen bağlantınızı kontrol edin.");
       }
@@ -189,57 +100,29 @@ export const login = async (email: string, password: string): Promise<AppUser> =
   } else {
     // --- YEREL SİMÜLASYON (MOCK MOD) GİRİŞİ ---
     const users = getLocalUsers();
-    const cleanEmail = email.toLowerCase().trim();
-    const username = cleanEmail.split("@")[0];
+    const username = cleanInput.split("@")[0].toLowerCase();
 
-    // 1. Önce kullanıcının sistemde kayıtlı kendi hesabı ve değiştirdiği özel şifresi var mı kontrol et
-    let foundUser = users.find(
+    const foundUser = users.find(
       (u) =>
-        u.email.toLowerCase() === cleanEmail ||
-        u.email.toLowerCase() === `${username}@takip.com` ||
+        u.email.toLowerCase() === targetEmail ||
         u.email.toLowerCase().split("@")[0] === username
     );
 
-    if (foundUser) {
-      if (foundUser.disabled) throw new Error("Hesabınız devre dışı bırakılmıştır!");
-      
-      // Kullanıcının ayarlardan değiştirdiği şifre varsa ÖNCE ONU KONTROL ET
-      if (foundUser.password) {
-        if (password === foundUser.password) {
-          triggerMockAuthChange(foundUser);
-          return foundUser;
-        }
-      }
-
-      // Varsayılan / bilinen şifreleri de kabul et (unutulma durumuna karşı)
-      const allowed = ["admin123", "sysadmin123", "sales123", "satis123", "accounting123", "muhasebe123", "123456", "12345678"];
-      if (known) allowed.push(...known.allowedPasswords);
-      if (allowed.includes(password)) {
-        triggerMockAuthChange(foundUser);
-        return foundUser;
-      }
-
+    if (!foundUser) {
       throw new Error("Hatalı kullanıcı adı ya da şifre!");
     }
 
-    // 2. Sistemde henüz olmayan bilinen bir varsayılan hesap ise
-    if (known) {
-      if (known.allowedPasswords.includes(password) || password === "123456" || password === "12345678") {
-        foundUser = {
-          uid: `mock-${username}-id`,
-          email: known.email,
-          displayName: known.displayName,
-          role: known.role,
-          createdAt: new Date().toISOString()
-        };
-        const updatedUsers = [...users, foundUser];
-        localStorage.setItem("takip_users", JSON.stringify(updatedUsers));
-        triggerMockAuthChange(foundUser);
-        return foundUser;
-      }
+    if (foundUser.disabled) {
+      throw new Error("Hesabınız devre dışı bırakılmıştır!");
     }
 
-    throw new Error("Hatalı kullanıcı adı ya da şifre!");
+    // Tek ve kesin şifre kontrolü
+    if (foundUser.password !== password) {
+      throw new Error("Hatalı kullanıcı adı ya da şifre!");
+    }
+
+    triggerMockAuthChange(foundUser);
+    return foundUser;
   }
 };
 
@@ -506,6 +389,9 @@ export const updateUserProfile = async (displayName: string, newPassword: string
       if (displayName) {
         users[idx].displayName = displayName;
         current.displayName = displayName;
+      }
+      if (newPassword) {
+        users[idx].password = newPassword;
       }
       localStorage.setItem("takip_users", JSON.stringify(users));
       localStorage.setItem("takip_current_user", JSON.stringify(current));
