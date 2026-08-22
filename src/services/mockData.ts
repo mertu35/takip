@@ -17,6 +17,13 @@ export const INITIAL_USERS: AppUser[] = [
     createdAt: new Date().toISOString()
   },
   {
+    uid: "mock-ali-id",
+    email: "ali.bilgin@takip.com",
+    displayName: "Ali Bilgin",
+    role: "sales",
+    createdAt: new Date().toISOString()
+  },
+  {
     uid: "mock-sales-id",
     email: "satis@takip.com",
     displayName: "Ali Satışçı",
