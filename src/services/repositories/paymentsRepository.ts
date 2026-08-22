@@ -68,9 +68,10 @@ const firebasePaymentsRepository: PaymentsRepository = {
     let finalPayment!: Payment;
 
     await runTransaction(firestore!, async (transaction) => {
-      // 1. Sıralı sayaç (receiptNo)
+      // 1. TÜM OKUMALAR (READS)
       const currentYear = new Date(input.date || Date.now()).getFullYear();
       const counterSnap = await transaction.get(counterDocRef);
+      const custSnap = await transaction.get(customerDocRef);
 
       let nextSequence = 1;
       if (counterSnap.exists()) {
@@ -79,12 +80,11 @@ const firebasePaymentsRepository: PaymentsRepository = {
           nextSequence = data.sequence + 1;
         }
       }
-      transaction.set(counterDocRef, { sequence: nextSequence, year: currentYear });
-
       const receiptNo = formatPaymentReceiptNo(currentYear, nextSequence);
 
-      // 2. Müşteri bakiyesini güncelle (Tahsilat borcu azaltır)
-      const custSnap = await transaction.get(customerDocRef);
+      // 2. TÜM YAZMALAR (WRITES)
+      transaction.set(counterDocRef, { sequence: nextSequence, year: currentYear });
+
       if (custSnap.exists()) {
         const custData = custSnap.data() as Customer;
         const oldBalance = typeof custData.currentBalance === "number" ? custData.currentBalance : 0;
@@ -191,6 +191,7 @@ const firebasePaymentsRepository: PaymentsRepository = {
     let finalSale!: Sale;
 
     await runTransaction(firestore!, async (transaction) => {
+      // 1. TÜM OKUMALAR (READS)
       const saleSnap = await transaction.get(saleDocRef);
       if (!saleSnap.exists()) throw new Error("Satış kaydı bulunamadı!");
       const saleData = saleSnap.data() as Sale;
@@ -199,9 +200,10 @@ const firebasePaymentsRepository: PaymentsRepository = {
         throw new Error("Bu çek zaten tahsil edilmiş!");
       }
 
-      // 1. Sıralı sayaç (receiptNo)
       const currentYear = new Date().getFullYear();
       const counterSnap = await transaction.get(counterDocRef);
+      const customerDocRef = doc(firestore!, "customers", saleData.customerId);
+      const custSnap = await transaction.get(customerDocRef);
 
       let nextSequence = 1;
       if (counterSnap.exists()) {
@@ -210,20 +212,17 @@ const firebasePaymentsRepository: PaymentsRepository = {
           nextSequence = data.sequence + 1;
         }
       }
-      transaction.set(counterDocRef, { sequence: nextSequence, year: currentYear });
-
       const receiptNo = formatPaymentReceiptNo(currentYear, nextSequence);
 
-      // 2. Müşteri bakiyesini güncelle
-      const customerDocRef = doc(firestore!, "customers", saleData.customerId);
-      const custSnap = await transaction.get(customerDocRef);
+      // 2. TÜM YAZMALAR (WRITES)
+      transaction.set(counterDocRef, { sequence: nextSequence, year: currentYear });
+
       if (custSnap.exists()) {
         const custData = custSnap.data() as Customer;
         const oldBalance = typeof custData.currentBalance === "number" ? custData.currentBalance : 0;
         transaction.update(customerDocRef, { currentBalance: oldBalance - saleData.netAmount });
       }
 
-      // 3. Satış çek durumunu 'collected' yap
       transaction.update(saleDocRef, { checkStatus: "collected" });
       finalSale = { ...saleData, id: saleSnap.id, checkStatus: "collected" };
 
