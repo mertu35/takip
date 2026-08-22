@@ -175,9 +175,45 @@ export const INITIAL_SALES: Sale[] = [
 
 export const INITIAL_LOGS: LogEntry[] = [
   {
+    id: "log-mete-1",
+    userId: "NOgU4jcm9APt8jNwPkHd4NYl0zV2",
+    userName: "Abdullah METE",
+    userRole: "sales",
+    action: "CREATE_SALE",
+    details: "TS-2026-00020 numaralı satış fişi oluşturuldu (Tutar: 10.500,00 TL).",
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: "log-mete-2",
+    userId: "NOgU4jcm9APt8jNwPkHd4NYl0zV2",
+    userName: "Abdullah METE",
+    userRole: "sales",
+    action: "ADD_PRODUCT",
+    details: "ARAGONİT FAYANS & SERAMİK YAPIŞTIRICI ürünü eklendi.",
+    createdAt: new Date(Date.now() - 3600000).toISOString()
+  },
+  {
+    id: "log-serin-1",
+    userId: "JfGOQZnza6VbkJBflXOzfoYuYB13",
+    userName: "Mehmet Ali SERİN",
+    userRole: "accounting",
+    action: "APPROVE_SALE",
+    details: "TS-2026-00018 numaralı (Vizyon YAPI) satış onaylandı. (Mikro'ya işlendi: Evet)",
+    createdAt: new Date(Date.now() - 7200000).toISOString()
+  },
+  {
+    id: "log-mete-3",
+    userId: "NOgU4jcm9APt8jNwPkHd4NYl0zV2",
+    userName: "Abdullah METE",
+    userRole: "sales",
+    action: "ADD_CUSTOMER",
+    details: "Bilal KARATAŞ (Vizyon YAPI) müşterisi eklendi.",
+    createdAt: new Date(Date.now() - 10800000).toISOString()
+  },
+  {
     id: "log-1",
-    userId: "mock-admin-id",
-    userName: "Ömer Yönetici (Patron)",
+    userId: "85KHRLPH8xRBpqw0PHPN6nqkBYZ2",
+    userName: "Emrah KONUKSEVEN",
     userRole: "admin",
     action: "ADD_PRODUCT",
     details: "Ergonomik Çalışma Sandalyesi (MOB-001) stok kartı oluşturuldu.",
@@ -185,20 +221,20 @@ export const INITIAL_LOGS: LogEntry[] = [
   },
   {
     id: "log-2",
-    userId: "mock-sales-id",
-    userName: "Ali Satışçı",
+    userId: "qSjWBS8upRXrkdCDtz9wXTyxaSp2",
+    userName: "Ali Bilgin",
     userRole: "sales",
     action: "CREATE_SALE",
-    details: "TS-2026-00001 numaralı satış oluşturuldu (Tutar: 16,650.00 TL).",
+    details: "TS-2026-00017 numaralı satış oluşturuldu (Tutar: 6.300,00 TL).",
     createdAt: d1.toISOString()
   },
   {
     id: "log-3",
-    userId: "mock-accounting-id",
-    userName: "Canan Muhasebeci",
+    userId: "W9ab7Rv5RPPTJHosVN1YtcJyZx23",
+    userName: "Canan YILMAZ",
     userRole: "accounting",
     action: "APPROVE_SALE",
-    details: "TS-2026-00001 numaralı satış onaylandı ve Mikro sistemine işlendi.",
+    details: "TS-2026-00017 numaralı satış onaylandı ve Mikro sistemine işlendi.",
     createdAt: d2.toISOString()
   }
 ];
