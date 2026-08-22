@@ -248,11 +248,71 @@ const Login = () => {
             <button
               type="submit"
               className="btn btn-primary"
-              style={{ width: "100%", marginTop: "1.5rem" }}
+              style={{ width: "100%", marginTop: "1.25rem" }}
               disabled={loading}
             >
               {loading ? "Giriş Yapılıyor..." : "Giriş Yap"}
             </button>
+
+            {/* Hızlı Giriş Butonları */}
+            <div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-color)" }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.5rem", textAlign: "center" }}>
+                Hızlı Hesap Seçimi:
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.75rem", padding: "0.3rem 0.4rem" }}
+                  onClick={() => {
+                    setEmail("admin");
+                    setPassword("admin123");
+                    setError("");
+                  }}
+                >
+                  👑 Patron (Admin)
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.75rem", padding: "0.3rem 0.4rem" }}
+                  onClick={() => {
+                    setEmail("satis");
+                    setPassword("sales123");
+                    setError("");
+                  }}
+                >
+                  🛍️ Satışçı (Ali)
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.75rem", padding: "0.3rem 0.4rem" }}
+                  onClick={() => {
+                    setEmail("muhasebe");
+                    setPassword("accounting123");
+                    setError("");
+                  }}
+                >
+                  📊 Muhasebeci
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.75rem", padding: "0.3rem 0.4rem" }}
+                  onClick={() => {
+                    setEmail("sysadmin");
+                    setPassword("sysadmin123");
+                    setError("");
+                  }}
+                >
+                  💻 Sistem Yöneticisi
+                </button>
+              </div>
+            </div>
           </form>
         ) : (
           /* --- ŞİFRE BİLGİLENDİRME --- */
