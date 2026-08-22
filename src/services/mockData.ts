@@ -3,7 +3,15 @@ import type { AppUser, Category, Product, Customer, Sale, LogEntry } from "../ty
 
 export const INITIAL_USERS: AppUser[] = [
   {
-    uid: "mock-sysadmin-id",
+    uid: "85KHRLPH8xRBpqw0PHPN6nqkBYZ2",
+    email: "admin@takip.com",
+    displayName: "Emrah KONUKSEVEN",
+    role: "admin",
+    password: "admin123",
+    createdAt: new Date().toISOString()
+  },
+  {
+    uid: "0HOvhvSUQvPDWREAaLdcytgXm0K3",
     email: "sysadmin@takip.com",
     displayName: "Ahmet Sistem Yöneticisi",
     role: "sysadmin",
@@ -11,15 +19,31 @@ export const INITIAL_USERS: AppUser[] = [
     createdAt: new Date().toISOString()
   },
   {
-    uid: "mock-admin-id",
-    email: "admin@takip.com",
-    displayName: "Ömer Yönetici (Patron)",
-    role: "admin",
-    password: "admin123",
+    uid: "NOgU4jcm9APt8jNwPkHd4NYl0zV2",
+    email: "abdullah.mete@takip.com",
+    displayName: "Abdullah METE",
+    role: "sales",
+    password: "123456",
     createdAt: new Date().toISOString()
   },
   {
-    uid: "mock-ali-id",
+    uid: "DcjRvpfXKAPP6mtbIIUDtNRbXfD3",
+    email: "ahmet.demir@takip.com",
+    displayName: "Ahmet DEMİR",
+    role: "sales",
+    password: "123456",
+    createdAt: new Date().toISOString()
+  },
+  {
+    uid: "JfGOQZnza6VbkJBflXOzfoYuYB13",
+    email: "mehmetali.serin@takip.com",
+    displayName: "Mehmet Ali SERİN",
+    role: "accounting",
+    password: "123456",
+    createdAt: new Date().toISOString()
+  },
+  {
+    uid: "qSjWBS8upRXrkdCDtz9wXTyxaSp2",
     email: "ali.bilgin@takip.com",
     displayName: "Ali Bilgin",
     role: "sales",
@@ -27,7 +51,7 @@ export const INITIAL_USERS: AppUser[] = [
     createdAt: new Date().toISOString()
   },
   {
-    uid: "mock-sales-id",
+    uid: "iKbMmavZtebMmsZ90ZFukIDFTP42",
     email: "satis@takip.com",
     displayName: "Ali Satışçı",
     role: "sales",
@@ -35,9 +59,9 @@ export const INITIAL_USERS: AppUser[] = [
     createdAt: new Date().toISOString()
   },
   {
-    uid: "mock-accounting-id",
+    uid: "W9ab7Rv5RPPTJHosVN1YtcJyZx23",
     email: "muhasebe@takip.com",
-    displayName: "Canan Muhasebeci",
+    displayName: "Canan YILMAZ",
     role: "accounting",
     password: "accounting123",
     createdAt: new Date().toISOString()

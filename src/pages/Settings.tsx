@@ -21,6 +21,7 @@ import {
 import * as XLSX from "xlsx";
 import { isFirebaseActive, firestore } from "../services/firebase";
 import { collection, getDocs } from "firebase/firestore";
+import { INITIAL_USERS } from "../services/mockData";
 import type { AppUser, Announcement, CompanyProfile, Role } from "../types";
 
 const SettingsPage = () => {
@@ -165,20 +166,31 @@ const SettingsPage = () => {
       if (isFirebaseActive) {
         const querySnapshot = await getDocs(collection(firestore!, "users"));
         const fbUsers = querySnapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() } as any))
+          .map((doc) => ({ id: doc.id, uid: doc.id, ...doc.data() } as any))
           .filter((u) => !u.disabled);
         setUsers(fbUsers);
       } else {
         const localUsers = localStorage.getItem("takip_users");
+        let list: AppUser[] = [];
         if (localUsers) {
           try {
-            const parsed = JSON.parse(localUsers);
-            setUsers(parsed.filter((u: AppUser) => !u.disabled));
+            list = JSON.parse(localUsers);
           } catch (err) {
             console.error("Kullanıcı listesi parse hatası:", err);
-            setUsers([]);
+            list = [];
           }
         }
+        let updated = false;
+        for (const initUser of INITIAL_USERS) {
+          if (!list.some((u) => u.email.toLowerCase() === initUser.email.toLowerCase())) {
+            list.push(initUser);
+            updated = true;
+          }
+        }
+        if (updated || !localUsers) {
+          localStorage.setItem("takip_users", JSON.stringify(list));
+        }
+        setUsers(list.filter((u: AppUser) => !u.disabled));
       }
     } catch (err) {
       console.error("Kullanıcılar yüklenirken hata:", err);
