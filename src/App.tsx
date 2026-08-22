@@ -13,15 +13,37 @@ import Login from "./pages/Login";
 // indirilmez, sadece ilgili rotaya gidildiğinde indirilir. Daha önce bu
 // dosyada tüm sayfalar en üstte eager import ediliyordu (bkz. proje
 // incelemesi: "route lazy-loading yok" eleştirisi).
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Sales = lazy(() => import("./pages/Sales"));
-const Customers = lazy(() => import("./pages/Customers"));
-const Accounting = lazy(() => import("./pages/Accounting"));
-const Inventory = lazy(() => import("./pages/Inventory"));
-const Logs = lazy(() => import("./pages/Logs"));
-const Settings = lazy(() => import("./pages/Settings"));
-const ExecutiveReports = lazy(() => import("./pages/ExecutiveReports"));
-const Proposals = lazy(() => import("./pages/Proposals"));
+// Güvenli lazy yükleyici: Yeni bir sürüm deploy edildiğinde eski JS chunk hatasını yakalar ve sayfayı sessizce yeniler
+const lazyWithRetry = (componentImport: () => Promise<any>) =>
+  lazy(async () => {
+    try {
+      return await componentImport();
+    } catch (error: any) {
+      const isChunkError =
+        error?.message?.includes("Failed to fetch dynamically imported module") ||
+        error?.message?.includes("Loading chunk");
+
+      if (isChunkError) {
+        const lastReload = Number(sessionStorage.getItem("takip_last_chunk_reload") || "0");
+        if (Date.now() - lastReload > 8000) {
+          sessionStorage.setItem("takip_last_chunk_reload", String(Date.now()));
+          window.location.reload();
+          return new Promise(() => {}); // Yüklemeyi beklet
+        }
+      }
+      throw error;
+    }
+  });
+
+const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"));
+const Sales = lazyWithRetry(() => import("./pages/Sales"));
+const Customers = lazyWithRetry(() => import("./pages/Customers"));
+const Accounting = lazyWithRetry(() => import("./pages/Accounting"));
+const Inventory = lazyWithRetry(() => import("./pages/Inventory"));
+const Logs = lazyWithRetry(() => import("./pages/Logs"));
+const Settings = lazyWithRetry(() => import("./pages/Settings"));
+const ExecutiveReports = lazyWithRetry(() => import("./pages/ExecutiveReports"));
+const Proposals = lazyWithRetry(() => import("./pages/Proposals"));
 
 const RouteFallback = () => (
   <div

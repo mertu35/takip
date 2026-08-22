@@ -22,6 +22,18 @@ class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error in component tree:", error, errorInfo);
+    // Yeni versiyon deploy edildiğinde eski chunk dosyası eksikse sayfayı sessizce yenile
+    const isChunkError =
+      error?.message?.includes("Failed to fetch dynamically imported module") ||
+      error?.message?.includes("Loading chunk");
+
+    if (isChunkError) {
+      const lastReload = Number(sessionStorage.getItem("takip_last_chunk_reload") || "0");
+      if (Date.now() - lastReload > 8000) {
+        sessionStorage.setItem("takip_last_chunk_reload", String(Date.now()));
+        window.location.reload();
+      }
+    }
   }
 
   public render() {
