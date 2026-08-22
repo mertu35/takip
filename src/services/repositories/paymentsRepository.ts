@@ -152,8 +152,18 @@ const firebasePaymentsRepository: PaymentsRepository = {
     const saleDocRef = payment.saleId ? doc(firestore!, "sales", payment.saleId) : null;
 
     await runTransaction(firestore!, async (t) => {
-      // 1. Müşterinin bakiyesine iptal edilen tahsilatı geri ekle
+      // Firestore transaction kuralı: TÜM okumalar TÜM yazmalardan önce
+      // yapılmalıdır. Önceden müşteri okunup hemen güncelleniyor, ardından
+      // satış okunuyordu; bu sıralama yüzünden çeke bağlı bir tahsilatın
+      // iptali her seferinde hata veriyordu (saleId boş olan tahsilatlarda
+      // ikinci okuma hiç yapılmadığı için sorun görünmüyordu).
+      //
+      // --- ÖNCE OKUMALAR ---
       const custSnap = await t.get(customerDocRef);
+      const saleSnap = saleDocRef ? await t.get(saleDocRef) : null;
+
+      // --- SONRA YAZMALAR ---
+      // 1. Müşterinin bakiyesine iptal edilen tahsilatı geri ekle
       if (custSnap.exists()) {
         const custData = custSnap.data() as Customer;
         const oldBalance = typeof custData.currentBalance === "number" ? custData.currentBalance : 0;
@@ -161,11 +171,8 @@ const firebasePaymentsRepository: PaymentsRepository = {
       }
 
       // 2. Eğer bu tahsilat bir satış çekine bağlıysa satışın durumunu tekrar 'portfolio' yap
-      if (saleDocRef) {
-        const saleSnap = await t.get(saleDocRef);
-        if (saleSnap.exists()) {
-          t.update(saleDocRef, { checkStatus: "portfolio" });
-        }
+      if (saleDocRef && saleSnap && saleSnap.exists()) {
+        t.update(saleDocRef, { checkStatus: "portfolio" });
       }
 
       // 3. Tahsilat kaydını sil
