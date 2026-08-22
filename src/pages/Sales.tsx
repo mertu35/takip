@@ -346,7 +346,7 @@ const Sales = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.role, user?.uid]);
+  }, [user?.role, user?.uid, showToast]);
 
   const handleRepeatSale = useCallback((sale: Sale) => {
     setSelectedCustomerId(sale.customerId);

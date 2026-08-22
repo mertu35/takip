@@ -5,7 +5,6 @@ import {
   getDocs,
   getDoc,
   query,
-  where,
   orderBy,
   runTransaction,
   deleteDoc,
@@ -76,7 +75,7 @@ const firebaseProposalsRepository: ProposalsRepository = {
     try {
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Proposal, "id">) }));
-    } catch (err: any) {
+    } catch (_err: any) {
       // Index henüz oluşmadıysa fallback sıralamasız sorgu
       const fallbackSnap = await getDocs(col);
       const docs = fallbackSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Proposal, "id">) }));
@@ -273,6 +272,11 @@ const mockProposalsRepository: ProposalsRepository = {
       list[idx].status = status;
       list[idx].updatedAt = new Date().toISOString();
       setLocalData("takip_proposals", list);
+      await logsRepository.add(
+        actor,
+        "UPDATE_PROPOSAL_STATUS",
+        `${list[idx].proposalNo} numaralı teklif mektubunun durumu "${status}" olarak güncellendi.`
+      );
     }
   },
 

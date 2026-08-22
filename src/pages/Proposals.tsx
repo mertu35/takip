@@ -1,5 +1,5 @@
 // Takip Sistemi - Teklif Mektubu & Çıktı Arşivi (Proposals)
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   getProposals,
@@ -21,18 +21,12 @@ import {
   Trash2,
   Edit,
   MessageCircle,
-  Building,
   User,
-  Phone,
   Calendar,
-  Layers,
-  Sparkles,
-  CheckCircle2,
-  ShoppingCart
+  Layers
 } from "lucide-react";
 import EmptyState from "../components/EmptyState";
 import { SkeletonTable } from "../components/Skeleton";
-import { generateProposalPDF } from "../utils/generateProposalPDF";
 import { formatCurrency, formatDate } from "../utils/format";
 import type { Proposal, ProposalItem, Customer, Product, CompanyProfile } from "../types";
 
@@ -100,7 +94,7 @@ const Proposals = () => {
     termsAndConditions: DEFAULT_TERMS
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [propData, custData, prodData, profileData] = await Promise.all([
@@ -118,11 +112,21 @@ const Proposals = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.role, user?.uid, showToast]);
 
   useEffect(() => {
     fetchData();
-  }, [user]);
+  }, [fetchData]);
+
+  // PDF İndirme (Dinamik chunk yükleme: sayfa ilk açılış boyutunu küçültür)
+  const handleDownloadPDF = async (prop: Proposal) => {
+    try {
+      const { generateProposalPDF } = await import("../utils/generateProposalPDF");
+      await generateProposalPDF(prop, companyProfile);
+    } catch (err: any) {
+      showToast("PDF oluşturulurken hata: " + err.message, "error");
+    }
+  };
 
   // Yeni Teklif Modalı Aç
   const handleOpenAddModal = () => {
@@ -360,11 +364,21 @@ const Proposals = () => {
         const created = await addProposal(payload, user.uid, user.displayName, user.role);
         showToast(`${created.proposalNo} numaralı teklif kaydedildi.`, "success");
         // Otomatik PDF üret
-        generateProposalPDF(created, companyProfile);
+        try {
+          const { generateProposalPDF } = await import("../utils/generateProposalPDF");
+          await generateProposalPDF(created, companyProfile);
+        } catch (_pdfErr) {
+          // PDF oluşturma hatası teklif kaydını engellemez
+        }
       } else {
         const updated = await updateProposal(selectedProposalId, payload, user.uid, user.displayName, user.role);
         showToast("Teklif güncellendi.", "success");
-        generateProposalPDF(updated, companyProfile);
+        try {
+          const { generateProposalPDF } = await import("../utils/generateProposalPDF");
+          await generateProposalPDF(updated, companyProfile);
+        } catch (_pdfErr) {
+          // PDF oluşturma hatası teklif kaydını engellemez
+        }
       }
 
       setShowModal(false);
@@ -522,7 +536,7 @@ ${itemsList}
                         <button
                           type="button"
                           className="btn btn-secondary btn-icon btn-sm"
-                          onClick={() => generateProposalPDF(prop, companyProfile)}
+                          onClick={() => handleDownloadPDF(prop)}
                           title="Özkon Antetli Teklif PDF İndir"
                           aria-label="PDF İndir"
                         >

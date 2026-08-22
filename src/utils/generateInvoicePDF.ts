@@ -39,7 +39,7 @@ export const generateInvoicePDF = async (sale: Sale, companyProfile?: CompanyPro
     if (logoPng) {
       doc.addImage(logoPng, "PNG", margin, 12, 40, 12.1);
     }
-  } catch (e) {
+  } catch (_e) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
     doc.setTextColor(15, 82, 186);

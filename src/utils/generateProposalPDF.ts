@@ -2,7 +2,6 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Proposal, CompanyProfile } from "../types";
 import { getOzkonLogoPng } from "./logoBase64";
-import { registerTurkishFonts } from "./customFonts";
 
 const fmt = (num?: number) =>
   (num || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₺";
@@ -15,10 +14,10 @@ export const generateProposalPDF = async (
   const W = doc.internal.pageSize.getWidth();
   const margin = 14;
 
-  // Türkçe karakter desteği için Roboto fontunu kaydet ve aktif et
+  // Türkçe karakter desteği için Roboto fontunu çalışma anında dinamik yükle ve kaydet (Sayfa ilk yükleme boyutunu ~30KB'a düşürür)
+  const { registerTurkishFonts } = await import("./customFonts");
   registerTurkishFonts(doc);
 
-  const companyName = companyProfile?.companyName || "ÖZKON YAPI İNŞAAT LTD. ŞTİ.";
   const address = companyProfile?.address || "Valide Sultan Mah. 100. Yıl Cad. No:74/B Karaman-Merkez";
   const phone = companyProfile?.phone || "0338 213 76 67";
   const fax = companyProfile?.fax || "0338 213 33 43";
@@ -38,7 +37,7 @@ export const generateProposalPDF = async (
       doc.setTextColor(0, 43, 141);
       doc.text("ÖZKON YAPI", margin, 18);
     }
-  } catch (e) {
+  } catch (_e) {
     doc.setFont("Roboto", "bold");
     doc.setFontSize(14);
     doc.setTextColor(0, 43, 141);
@@ -263,6 +262,6 @@ export const generateProposalPDF = async (
     { align: "center" }
   );
 
-  const safeFileName = `Teklif_${proposal.proposalNo}_${proposal.customerCompany || proposal.customerName || "Musteri"}`.replace(/[\/\\?%*:|"<>]/g, "_");
+  const safeFileName = `Teklif_${proposal.proposalNo}_${proposal.customerCompany || proposal.customerName || "Musteri"}`.replace(/[/\\?%*:|"<>]/g, "_");
   doc.save(`${safeFileName}.pdf`);
 };
