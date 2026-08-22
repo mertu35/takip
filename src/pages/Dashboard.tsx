@@ -26,7 +26,7 @@ import {
 import { Link } from "react-router-dom";
 import type { Sale, Product, Customer, Payment } from "../types";
 
-type DashboardDateFilter = "all" | "today" | "week" | "month" | "custom";
+type DashboardDateFilter = "all" | "today" | "week" | "month" | "year" | "custom";
 
 const CHART_PALETTE = {
   light: { primary: "#1e3a8a", warning: "#c2410c", border: "#cbd5e1", textSecondary: "#334155" },
@@ -42,17 +42,41 @@ const Dashboard = () => {
   const { theme } = useTheme();
 
   // Tarih Filtresi State
-  const [dateFilter, setDateFilter] = useState<DashboardDateFilter>("all");
+  // Varsayılan "Bu Yıl": eskiden "Tümü" idi ve Dashboard her açılışta TÜM
+  // satışları indiriyordu. Firestore her dokümanı ayrı okuma saydığı için
+  // bu, veri büyüdükçe en pahalı ekran oluyordu. "Tümü" seçeneği duruyor,
+  // isteyen tek tıkla tüm zamanlara bakabilir.
+  const [dateFilter, setDateFilter] = useState<DashboardDateFilter>("year");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
   const chartColor = useMemo(() => CHART_PALETTE[theme] ?? CHART_PALETTE.light, [theme]);
 
+  // Seçili döneme göre sorguya gönderilecek başlangıç tarihi.
+  // null dönerse (Tümü / Özel) eski davranış geçerli: hepsini getir.
+  const querySince = useMemo(() => {
+    const now = new Date();
+    if (dateFilter === "today") return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (dateFilter === "week") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return d;
+    }
+    if (dateFilter === "month") {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return d;
+    }
+    if (dateFilter === "year") return new Date(now.getFullYear(), 0, 1);
+    if (dateFilter === "custom" && customStartDate) return new Date(`${customStartDate}T00:00:00`);
+    return null;
+  }, [dateFilter, customStartDate]);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [salesData, productsData, customersData, paymentsData] = await Promise.all([
-          getSales(),
+          getSales(undefined, undefined, querySince ? { since: querySince.toISOString() } : undefined),
           getProducts(),
           getCustomers(),
           getPayments().catch(() => [] as Payment[])
@@ -68,9 +92,13 @@ const Dashboard = () => {
       }
     };
     fetchData();
-  }, []);
+    // Dönem değişince veri yeniden çekilir (filtre artık sunucu tarafında).
+  }, [querySince]);
 
   // Tarih Filtreleme Fonksiyonu
+  // NOT: Sorgu zaten başlangıç tarihine göre daraltıyor; bu fonksiyon bitiş
+  // tarihi ve "özel aralık" için istemci tarafında ikinci bir süzgeç olarak
+  // kalıyor. İkisi çakışmaz, sadece aynı sonucu garantiler.
   const matchesDate = (dateStr: string): boolean => {
     if (dateFilter === "all") return true;
 
@@ -92,6 +120,10 @@ const Dashboard = () => {
       const monthAgo = new Date();
       monthAgo.setDate(monthAgo.getDate() - 30);
       return saleDate >= monthAgo;
+    }
+
+    if (dateFilter === "year") {
+      return saleDate >= new Date(now.getFullYear(), 0, 1);
     }
 
     if (dateFilter === "custom") {
@@ -264,6 +296,7 @@ const Dashboard = () => {
     today: "Bugün",
     week: "Bu Hafta",
     month: "Bu Ay",
+    year: "Bu Yıl",
     custom: "Özel Tarih"
   };
 
@@ -326,7 +359,7 @@ const Dashboard = () => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
-          {(["all", "today", "week", "month", "custom"] as DashboardDateFilter[]).map((f) => {
+          {(["all", "today", "week", "month", "year", "custom"] as DashboardDateFilter[]).map((f) => {
             const isActive = dateFilter === f;
             return (
               <button

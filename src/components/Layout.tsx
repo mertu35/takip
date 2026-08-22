@@ -47,8 +47,11 @@ const Layout = ({ children }: LayoutProps) => {
           setUserNotifications(notifs);
           setUnreadCount(notifs.filter((n) => !n.read).length);
         } else {
-          const salesData = await getSales(user.role, user.uid);
-          const pending = salesData.filter((s) => s.status === "pending_accounting");
+          // Zil rozeti yalnızca "onay bekleyen" satışları sayıyor. Eskiden TÜM
+          // satışlar çekilip istemcide süzülüyordu; Layout her sayfada
+          // çalıştığı için bu, okuma tüketiminin en büyük kalemiydi.
+          // Artık filtre sorguya taşındı: sadece bekleyenler iniyor.
+          const pending = await getSales(user.role, user.uid, { status: "pending_accounting" });
           setPendingSales(pending);
           const lastSeenStr = localStorage.getItem(`takip_seen_pending_${user.uid}`);
           const lastSeenTimestamp = lastSeenStr ? Number(lastSeenStr) : 0;

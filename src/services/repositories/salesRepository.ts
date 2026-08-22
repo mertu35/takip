@@ -49,8 +49,27 @@ export interface NewSaleInput {
   notes?: string;
 }
 
+/**
+ * Satış sorgusunu daraltma seçenekleri.
+ *
+ * Neden var: uygulama eskiden her ekranda TÜM satışları çekiyordu. Firestore
+ * her dokümanı ayrı bir "okuma" olarak faturalandırdığı için, veri büyüdükçe
+ * okuma sayısı hızla artıyor (Spark planında günlük 50.000 sınırı var).
+ *
+ * ÖNEMLİ (Firestore index kuralı): `since` ile `salespersonId` filtresini AYNI
+ * anda kullanmak composite index gerektirir (eşitlik + eşitsizlik farklı
+ * alanlarda). Şu an böyle bir çağrı yok; eklenirse önce
+ * firestore.indexes.json'a ilgili index tanımlanmalı, yoksa sorgu hata verir.
+ */
+export interface SalesQueryOptions {
+  /** Bu ISO tarihten sonraki satışlar (ör. yılbaşı, son 3 ay) */
+  since?: string;
+  /** Yalnızca bu durumdaki satışlar (ör. sadece onay bekleyenler) */
+  status?: Sale["status"];
+}
+
 export interface SalesRepository {
-  getAll(role?: Role | string, userId?: string): Promise<Sale[]>;
+  getAll(role?: Role | string, userId?: string, options?: SalesQueryOptions): Promise<Sale[]>;
   add(saleData: NewSaleInput, actor: ActorInfo): Promise<Sale>;
   editItems(
     saleId: string,
@@ -78,18 +97,29 @@ export interface SalesRepository {
 // FIREBASE IMPLEMENTASYONU
 // ---------------------------------------------------------------------------
 const firebaseSalesRepository: SalesRepository = {
-  async getAll(role, userId) {
-    let q;
+  async getAll(role, userId, options) {
+    const constraints = [];
+
     if (role === "sales" && userId) {
-      q = query(collection(firestore!, "sales"), where("salespersonId", "==", userId));
-    } else {
-      q = query(collection(firestore!, "sales"), orderBy("date", "desc"));
+      constraints.push(where("salespersonId", "==", userId));
     }
+    if (options?.status) {
+      constraints.push(where("status", "==", options.status));
+    }
+    if (options?.since) {
+      // Tek alan üzerinde eşitsizlik: Firestore otomatik tek-alan index'iyle
+      // karşılar, ayrıca composite index gerekmez. orderBy eklemiyoruz;
+      // sıralamayı aşağıda istemcide yapıyoruz (aynı sonuç, index derdi yok).
+      constraints.push(where("date", ">=", options.since));
+    }
+
+    const q = constraints.length
+      ? query(collection(firestore!, "sales"), ...constraints)
+      : query(collection(firestore!, "sales"), orderBy("date", "desc"));
+
     const snap = await getDocs(q);
     const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Sale, "id">) }));
-    if (role === "sales") {
-      docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }
+    docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return docs;
   },
 
@@ -370,12 +400,18 @@ const firebaseSalesRepository: SalesRepository = {
 // MOCK (LOCALSTORAGE) İMPLEMENTASYONU
 // ---------------------------------------------------------------------------
 const mockSalesRepository: SalesRepository = {
-  async getAll(role, userId) {
-    const all = getLocalData<Sale>("takip_sales").sort(
+  async getAll(role, userId, options) {
+    let all = getLocalData<Sale>("takip_sales").sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
     if (role === "sales" && userId) {
-      return all.filter((s) => s.salespersonId === userId);
+      all = all.filter((s) => s.salespersonId === userId);
+    }
+    if (options?.status) {
+      all = all.filter((s) => s.status === options.status);
+    }
+    if (options?.since) {
+      all = all.filter((s) => s.date >= options.since!);
     }
     return all;
   },

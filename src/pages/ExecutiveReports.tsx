@@ -70,32 +70,10 @@ const ExecutiveReports = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>("salespeople");
   const [checkStatusTab, setCheckStatusTab] = useState<CheckTabType>("portfolio");
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [salesData, prodData, custData, paymentData, profileData] = await Promise.all([
-        getSales("admin"),
-        getProducts(),
-        getCustomers(),
-        getPayments(),
-        getCompanyProfile().catch(() => null)
-      ]);
-      setSales(salesData);
-      setProducts(prodData);
-      setCustomers(custData);
-      setPayments(paymentData);
-      setCompanyProfile(profileData);
-    } catch {
-      showToast("Yönetici rapor verileri yüklenemedi.", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // --- TARİH ARALIĞI TARAMA ---
+  // --- TARİH ARALIĞI ---
+  // NOT: Bu hesap bilinçli olarak fetchData'dan ÖNCE duruyor; `startDate`
+  // artık Firestore sorgusuna gönderiliyor (aşağıya alınırsa fetchData'nın
+  // bağımlılık dizisi tanımlanmamış değişkene bakar ve hata verir).
   const { startDate, endDate, periodLabel } = useMemo(() => {
     const now = new Date();
     let start: Date | null = null;
@@ -130,6 +108,34 @@ const ExecutiveReports = () => {
 
     return { startDate: start, endDate: end, periodLabel: label };
   }, [datePreset, customStartDate, customEndDate]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [salesData, prodData, custData, paymentData, profileData] = await Promise.all([
+        // Seçili dönemin başlangıcı sorguya gönderiliyor: eskiden tüm satışlar
+        // indirilip istemcide süzülüyordu. "Tüm Zamanlar" seçilirse startDate
+        // null olur ve eski davranışa (hepsini getir) düşer.
+        getSales("admin", undefined, startDate ? { since: startDate.toISOString() } : undefined),
+        getProducts(),
+        getCustomers(),
+        getPayments(),
+        getCompanyProfile().catch(() => null)
+      ]);
+      setSales(salesData);
+      setProducts(prodData);
+      setCustomers(custData);
+      setPayments(paymentData);
+      setCompanyProfile(profileData);
+    } catch {
+      showToast("Yönetici rapor verileri yüklenemedi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast, startDate]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Filtrelenmiş Onaylı Satışlar
   const filteredSales = useMemo(() => {

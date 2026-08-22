@@ -28,7 +28,8 @@ import type {
 import { productsRepository } from "./repositories/productsRepository";
 import { categoriesRepository } from "./repositories/categoriesRepository";
 import { customersRepository, getSalesByCustomer as _getSalesByCustomer } from "./repositories/customersRepository";
-import { salesRepository } from "./repositories/salesRepository";
+import { salesRepository, type SalesQueryOptions } from "./repositories/salesRepository";
+export type { SalesQueryOptions };
 import { paymentsRepository, type NewPaymentInput } from "./repositories/paymentsRepository";
 import { proposalsRepository } from "./repositories/proposalsRepository";
 import { notificationsRepository } from "./repositories/notificationsRepository";
@@ -146,8 +147,11 @@ export const deleteProduct = (
 ) => productsRepository.remove(productId, actorOf(currentUserId, currentUserName, currentUserRole));
 
 // --- SATIŞLAR ---
-export const getSales = (role?: Role | string, userId?: string): Promise<Sale[]> =>
-  salesRepository.getAll(role, userId);
+export const getSales = (
+  role?: Role | string,
+  userId?: string,
+  options?: SalesQueryOptions
+): Promise<Sale[]> => salesRepository.getAll(role, userId, options);
 
 export const addSale = (
   saleData: {
