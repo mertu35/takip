@@ -189,13 +189,42 @@ export const login = async (email: string, password: string): Promise<AppUser> =
   } else {
     // --- YEREL SİMÜLASYON (MOCK MOD) GİRİŞİ ---
     const users = getLocalUsers();
+    const cleanEmail = email.toLowerCase().trim();
+    const username = cleanEmail.split("@")[0];
 
-    if (known) {
-      if (!known.allowedPasswords.includes(password)) {
-        throw new Error("Hatalı kullanıcı adı ya da şifre!");
+    // 1. Önce kullanıcının sistemde kayıtlı kendi hesabı ve değiştirdiği özel şifresi var mı kontrol et
+    let foundUser = users.find(
+      (u) =>
+        u.email.toLowerCase() === cleanEmail ||
+        u.email.toLowerCase() === `${username}@takip.com` ||
+        u.email.toLowerCase().split("@")[0] === username
+    );
+
+    if (foundUser) {
+      if (foundUser.disabled) throw new Error("Hesabınız devre dışı bırakılmıştır!");
+      
+      // Kullanıcının ayarlardan değiştirdiği şifre varsa ÖNCE ONU KONTROL ET
+      if (foundUser.password) {
+        if (password === foundUser.password) {
+          triggerMockAuthChange(foundUser);
+          return foundUser;
+        }
       }
-      let foundUser = users.find((u) => u.email.toLowerCase() === known.email.toLowerCase());
-      if (!foundUser) {
+
+      // Varsayılan / bilinen şifreleri de kabul et (unutulma durumuna karşı)
+      const allowed = ["admin123", "sysadmin123", "sales123", "satis123", "accounting123", "muhasebe123", "123456", "12345678"];
+      if (known) allowed.push(...known.allowedPasswords);
+      if (allowed.includes(password)) {
+        triggerMockAuthChange(foundUser);
+        return foundUser;
+      }
+
+      throw new Error("Hatalı kullanıcı adı ya da şifre!");
+    }
+
+    // 2. Sistemde henüz olmayan bilinen bir varsayılan hesap ise
+    if (known) {
+      if (known.allowedPasswords.includes(password) || password === "123456" || password === "12345678") {
         foundUser = {
           uid: `mock-${username}-id`,
           email: known.email,
@@ -203,23 +232,14 @@ export const login = async (email: string, password: string): Promise<AppUser> =
           role: known.role,
           createdAt: new Date().toISOString()
         };
+        const updatedUsers = [...users, foundUser];
+        localStorage.setItem("takip_users", JSON.stringify(updatedUsers));
+        triggerMockAuthChange(foundUser);
+        return foundUser;
       }
-      if (foundUser.disabled) throw new Error("Hesabınız devre dışı bırakılmıştır!");
-      triggerMockAuthChange(foundUser);
-      return foundUser;
     }
 
-    const foundUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (!foundUser) throw new Error("Hatalı kullanıcı adı ya da şifre!");
-    if (foundUser.disabled) throw new Error("Hesabınız devre dışı bırakılmıştır!");
-
-    const allowed = ["admin123", "sysadmin123", "sales123", "satis123", "accounting123", "muhasebe123", "123456", "12345678"];
-    if (foundUser.password ? foundUser.password !== password : !allowed.includes(password)) {
-      throw new Error("Hatalı kullanıcı adı ya da şifre!");
-    }
-
-    triggerMockAuthChange(foundUser);
-    return foundUser;
+    throw new Error("Hatalı kullanıcı adı ya da şifre!");
   }
 };
 
