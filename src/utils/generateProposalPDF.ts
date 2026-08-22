@@ -1,13 +1,13 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Proposal, CompanyProfile } from "../types";
-import { OZKON_LOGO_BASE64 } from "./logoBase64";
+import { getOzkonLogoPng } from "./logoBase64";
 import { registerTurkishFonts } from "./customFonts";
 
 const fmt = (num?: number) =>
   (num || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₺";
 
-export const generateProposalPDF = (
+export const generateProposalPDF = async (
   proposal: Proposal,
   companyProfile?: CompanyProfile | null
 ) => {
@@ -29,12 +29,20 @@ export const generateProposalPDF = (
 
   // Sol: Şirket Resmi Logosu (210x63 aspect ratio ~ 44mm x 13.3mm)
   try {
-    doc.addImage(OZKON_LOGO_BASE64, "PNG", margin, 10, 44, 13.3);
+    const logoPng = await getOzkonLogoPng();
+    if (logoPng) {
+      doc.addImage(logoPng, "PNG", margin, 10, 44, 13.3);
+    } else {
+      doc.setFont("Roboto", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(0, 43, 141);
+      doc.text("ÖZKON YAPI", margin, 18);
+    }
   } catch (e) {
     doc.setFont("Roboto", "bold");
     doc.setFontSize(14);
-    doc.setTextColor(20, 45, 90);
-    doc.text(companyName, margin, 18);
+    doc.setTextColor(0, 43, 141);
+    doc.text("ÖZKON YAPI", margin, 18);
   }
 
   doc.setFont("Roboto", "normal");

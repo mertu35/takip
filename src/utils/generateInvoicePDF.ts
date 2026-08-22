@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Sale, CompanyProfile } from "../types";
-import { OZKON_LOGO_BASE64 } from "./logoBase64";
+import { getOzkonLogoPng } from "./logoBase64";
 
 // Türkçe karakter dönüşümü (jsPDF Latin-1 encoding kullanır)
 const tr = (text?: string | null) =>
@@ -22,7 +22,7 @@ const tr = (text?: string | null) =>
 const fmt = (num?: number) =>
   (num || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 }) + " TL";
 
-export const generateInvoicePDF = (sale: Sale, companyProfile?: CompanyProfile | null) => {
+export const generateInvoicePDF = async (sale: Sale, companyProfile?: CompanyProfile | null) => {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const margin = 18;
@@ -35,7 +35,10 @@ export const generateInvoicePDF = (sale: Sale, companyProfile?: CompanyProfile |
   const taxNumber = companyProfile?.taxNumber || "7000074860";
 
   try {
-    doc.addImage(OZKON_LOGO_BASE64, "PNG", margin, 12, 40, 12.1);
+    const logoPng = await getOzkonLogoPng();
+    if (logoPng) {
+      doc.addImage(logoPng, "PNG", margin, 12, 40, 12.1);
+    }
   } catch (e) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);

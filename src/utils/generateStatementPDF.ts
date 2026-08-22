@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Customer, Sale, Payment, CompanyProfile } from "../types";
 import { PAYMENT_METHOD_LABELS } from "./salesMath";
-import { OZKON_LOGO_BASE64 } from "./logoBase64";
+import { getOzkonLogoPng } from "./logoBase64";
 
 // Türkçe karakter dönüşümü
 const tr = (text?: string | null) =>
@@ -35,7 +35,7 @@ export interface StatementItem {
   runningBalance: number; // Yürüyen bakiye
 }
 
-export const generateStatementPDF = (
+export const generateStatementPDF = async (
   customer: Customer,
   sales: Sale[],
   payments: Payment[],
@@ -55,7 +55,10 @@ export const generateStatementPDF = (
 
   // Başlık Alanı
   try {
-    doc.addImage(OZKON_LOGO_BASE64, "PNG", margin, 10, 40, 12.1);
+    const logoPng = await getOzkonLogoPng();
+    if (logoPng) {
+      doc.addImage(logoPng, "PNG", margin, 10, 40, 12.1);
+    }
   } catch (e) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);

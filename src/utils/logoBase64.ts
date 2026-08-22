@@ -1,3 +1,46 @@
-// Takip Sistemi - Resmi ÖZKON Logo Verisi (ozkonyapi.com orijinal dosyası)
-export const OZKON_LOGO_SVG_BASE64 = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI1LjMuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9ImthdG1hbl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIKCSB2aWV3Qm94PSIwIDAgMjEwLjEgNjMuNiIgc3R5bGU9ImVuYWJsZS1iYWNrZ3JvdW5kOm5ldyAwIDAgMjEwLjEgNjMuNjsiIHhtbDpzcGFjZT0icHJlc2VydmUiPgo8c3R5bGUgdHlwZT0idGV4dC9jc3MiPgoJLnN0MHtmaWxsLXJ1bGU6ZXZlbm9kZDtjbGlwLXJ1bGU6ZXZlbm9kZDtmaWxsOiMwMDJCOEQ7fQoJLnN0MXtmaWxsLXJ1bGU6ZXZlbm9kZDtjbGlwLXJ1bGU6ZXZlbm9kZDt9Cjwvc3R5bGU+CjxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik00NC45LDExLjNoNS40djUuNHY2djUuNHY2LjljMCwxMy4xLTEwLjYsMjMuOC0yMy44LDIzLjhTMi43LDQ4LjIsMi43LDM1LjFzMTAuNi0yMy44LDIzLjgtMjMuOGg2LjhoNS40SDQ0Ljl6CgkgTTQ0LjksMjIuOFYyMHYtMy4yaC0zLjJoLTIuOXY2SDQ0Ljl6IE00NC45LDM1LjF2LTYuOWgtNi4xdjYuOWMwLDYuOC01LjUsMTIuMy0xMi4zLDEyLjNzLTEyLjMtNS41LTEyLjMtMTIuMwoJYzAtNi44LDUuNS0xMi4zLDEyLjMtMTIuM3YwaDYuOHYtNmgtNi44QzE2LjQsMTYuOCw4LjIsMjUsOC4yLDM1LjFzOC4yLDE4LjMsMTguMywxOC4zUzQ0LjksNDUuMiw0NC45LDM1LjF6IE0zMy40LDM1LjFMMzMuNCwzNS4xCgl2LTYuOGgtNi41Yy0wLjEsMC0wLjIsMC0wLjMsMGMtMy44LDAtNi44LDMuMS02LjgsNi44YzAsMy44LDMuMSw2LjgsNi44LDYuOFMzMy40LDM4LjksMzMuNCwzNS4xeiIvPgo8Zz4KCTxwYXRoIGQ9Ik0xNTguOSw1NC41aC0zLjJWNDEuM2gzLjJWNTQuNXogTTE0NC45LDQ5LjZjMC41LDAsMS0wLjEsMS40LTAuMmMwLjQtMC4xLDAuNy0wLjMsMC45LTAuNWMwLjItMC4yLDAuNC0wLjUsMC41LTAuOQoJCWMwLjEtMC4zLDAuMi0wLjgsMC4zLTEuMmMwLTAuNC0wLjEtMC43LTAuMi0xYy0wLjEtMC4zLTAuMy0wLjYtMC41LTAuOWMtMC4yLTAuMy0wLjYtMC41LTAuOS0wLjZjLTAuNC0wLjItMC45LTAuMi0xLjQtMC4yaC00LjUKCQl2NS42SDE0NC45eiBNMTQwLjMsNTQuNWgtMy4yVjQxLjNoOS4xYzAuNywwLDEuMywwLjEsMS45LDAuNGMwLjYsMC4zLDEuMSwwLjcsMS42LDEuM2MwLjUsMC42LDAuOCwxLjEsMSwxLjgKCQljMC4yLDAuNiwwLjMsMS4yLDAuMywxLjlsMCwwaDBjMCwwLjctMC4xLDEuMy0wLjMsMS45Yy0wLjIsMC42LTAuNiwxLjItMSwxLjhjLTAuNCwwLjYtMSwxLTEuNiwxLjNjLTAuNiwwLjMtMS4yLDAuNC0xLjksMC40aC01LjkKCQlWNTQuNXogTTEyNC44LDQzLjljLTAuNSwwLTEsMC4xLTEuMywwLjJjLTAuNCwwLjItMC43LDAuNC0wLjksMC42Yy0wLjIsMC4zLTAuNCwwLjUtMC42LDAuOWMtMC4xLDAuMy0wLjIsMC42LTAuMywwLjl2M2g3Ljd2LTUuNwoJCUgxMjQuOHogTTEyMS43LDU0LjVoLTMuMXYtNy44YzAtMC43LDAuMS0xLjMsMC40LTJjMC4yLTAuNywwLjYtMS4yLDEtMS44YzAuNC0wLjUsMC45LTAuOSwxLjUtMS4zYzAuNi0wLjMsMS4yLTAuNSwxLjktMC41aDkuMQoJCXYxMy4zaC0zLjJ2LTIuM2gtNy43VjU0LjV6IE0xMTQsNDEuM2gtMy4zdjUuMmgtNi4xYy0wLjYtMC4xLTEuMS0wLjItMS40LTAuNmMtMC4zLTAuMy0wLjUtMC43LTAuNS0xLjN2LTMuNGgtMy4ydjIuMwoJCWMwLDAuOSwwLjEsMS43LDAuMiwyLjRjMC4xLDAuNywwLjQsMS4zLDAuOCwxLjhjMC40LDAuNSwwLjksMC44LDEuNSwxLjFjMC42LDAuMywxLjQsMC40LDIuMywwLjRoNi40Yy0wLjIsMS0wLjYsMS42LTEuMiwyCgkJYy0wLjYsMC40LTEuNCwwLjUtMi40LDAuNWgtNC40djIuOGg1LjJjMi4xLDAsMy42LTAuNiw0LjYtMS43YzEtMS4yLDEuNS0yLjgsMS41LTQuOEwxMTQsNDEuM3oiLz4KCTxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik03Mi43LDM2LjNoLTguM2MtMS45LDAtMy41LTAuMy00LjgtMC44Yy0xLjMtMC41LTIuMy0xLjItMy4xLTIuMmMtMC44LTAuOS0xLjQtMi4xLTEuNy0zLjQKCQljLTAuNC0xLjQtMC41LTIuOS0wLjUtNC42YzAtMS43LDAuMi0zLjIsMC42LTQuNWMwLjQtMS4zLDEtMi41LDEuOC0zLjRjMC44LTAuOSwxLjgtMS43LDMtMi4xYzEuMS0wLjQsMi4zLTAuNywzLjctMC43djUuNAoJCWMtMC40LDAuMi0wLjgsMC40LTEuMSwwLjZjLTAuNCwwLjQtMC43LDAuOC0wLjgsMS4yYy0wLjIsMC41LTAuMiwxLTAuMiwxLjV2NC40YzAsMi41LDEuNiwzLjcsNC44LDMuN2g0LjdjMy40LDAsNS4xLTEuMiw1LjEtMy43CgkJdi00LjRjMC0wLjUtMC4xLTEtMC4yLTEuNWMtMC4yLTAuNS0wLjQtMC45LTAuOC0xLjJjLTAuMy0wLjMtMC42LTAuNS0xLjEtMC42di01LjRjMywwLjEsNS4zLDEuMSw2LjgsMi45YzEuNiwxLjksMi40LDQuNiwyLjQsOAoJCWMwLDEuNy0wLjIsMy4zLTAuNSw0LjZjLTAuNCwxLjQtMC45LDIuNS0xLjcsMy40Yy0wLjgsMC45LTEuOCwxLjctMy4xLDIuMkM3Ni4yLDM2LjEsNzQuNiwzNi4zLDcyLjcsMzYuMyIvPgoJPHBvbHlnb24gcG9pbnRzPSIxMTEuMiwxOS4yIDk1LjIsMzEuNCAxMTEuMiwzMS40IDExMS4yLDM2LjMgODUuNiwzNi4zIDg1LjYsMzEuNiAxMDEuNiwxOS40IDg1LjYsMTkuNCA4NS42LDE0LjUgMTExLjIsMTQuNSAJIi8+Cgk8cG9seWdvbiBwb2ludHM9IjEyMiwxNC41IDEyMiwyMi42IDEzNS4zLDE0LjQgMTQ0LjQsMTQuNCAxMjcuNCwyNS4zIDE0NC40LDM2LjMgMTM1LjMsMzYuMyAxMjIsMjguMyAxMjIsMzYuMyAxMTUuMSwzNi4zIAoJCTExNS4xLDE0LjUgCSIvPgoJPHBhdGggZD0iTTE2NC44LDIzLjNjMC0wLjUtMC4xLTEtMC4yLTEuNWMtMC4yLTAuNS0wLjQtMC45LTAuOC0xLjJjLTAuNC0wLjQtMC45LTAuNi0xLjYtMC44Yy0wLjctMC4yLTEuNS0wLjMtMi41LTAuM2gtNC40CgkJYy0xLDAtMS44LDAuMS0yLjUsMC4zYy0wLjcsMC4yLTEuMiwwLjUtMS42LDAuOGMtMC40LDAuNC0wLjcsMC44LTAuOCwxLjJjLTAuMiwwLjUtMC4yLDEtMC4yLDEuNXY0LjRjMCwyLjUsMS42LDMuNyw0LjgsMy43aDQuNwoJCWMzLjQsMCw1LjEtMS4yLDUuMS0zLjdWMjMuM3ogTTE2MS43LDM2LjNoLTguM2MtMS45LDAtMy41LTAuMy00LjgtMC44Yy0xLjMtMC41LTIuMy0xLjItMy4xLTIuMmMtMC44LTAuOS0xLjQtMi4xLTEuNy0zLjQKCQljLTAuNC0xLjQtMC41LTIuOS0wLjUtNC42YzAtMS43LDAuMi0zLjIsMC42LTQuNWMwLjQtMS4zLDEtMi41LDEuOC0zLjRjMC44LTAuOSwxLjgtMS43LDMtMi4xYzEuMi0wLjUsMi43LTAuNyw0LjMtMC43aDkuMgoJCWMzLjMsMCw1LjgsMSw3LjMsMi45YzEuNiwxLjksMi40LDQuNiwyLjQsOGMwLDEuNy0wLjIsMy4zLTAuNSw0LjZjLTAuNCwxLjQtMC45LDIuNS0xLjcsMy40Yy0wLjgsMC45LTEuOCwxLjctMy4xLDIuMgoJCUMxNjUuMiwzNi4xLDE2My42LDM2LjMsMTYxLjcsMzYuM3oiLz4KCTxwYXRoIGQ9Ik0yMDQuMSwzNi4zaC02LjhWMjQuMmMwLTAuNi0wLjEtMS4yLTAuMi0xLjhjLTAuMS0wLjYtMC40LTEuMS0wLjgtMS41Yy0wLjQtMC40LTEtMC44LTEuNy0xLjFjLTAuNy0wLjMtMS43LTAuNC0yLjgtMC40CgkJaC05LjJ2MTYuOWgtN1YxNC41aDE4LjhjMS40LDAsMi43LDAuMiwzLjksMC43YzEuMiwwLjUsMi4yLDEuMiwzLjEsMi4yYzAuOSwxLDEuNiwxLjksMi4xLDIuOWMwLjQsMSwwLjcsMi4xLDAuNywzLjJWMzYuM3oiLz4KCTxyZWN0IHg9IjY0LjQiIHk9IjExLjUiIGNsYXNzPSJzdDEiIHdpZHRoPSIzLjYiIGhlaWdodD0iMTAiLz4KCTxyZWN0IHg9IjY5LjIiIHk9IjExLjUiIGNsYXNzPSJzdDEiIHdpZHRoPSIzLjYiIGhlaWdodD0iMTAiLz4KPC9nPgo8L3N2Zz4K";
-export const OZKON_LOGO_BASE64 = OZKON_LOGO_SVG_BASE64;
+// Takip Sistemi - Resmi ÖZKON Logo Yönetimi ve PDF Rasterizer
+
+// Browser ortamında SVG'yi yüksek çözünürlüklü (High-DPI) PNG'ye çeviren ve önbelleğe alan motor
+let cachedLogoPng: string | null = null;
+
+export const getOzkonLogoPng = async (): Promise<string | null> => {
+  if (cachedLogoPng) return cachedLogoPng;
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return null;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const scale = 4; // 4x Retina / Baskı kalitesi
+          canvas.width = (img.naturalWidth || 210) * scale;
+          canvas.height = (img.naturalHeight || 64) * scale;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            cachedLogoPng = canvas.toDataURL("image/png");
+            resolve(cachedLogoPng);
+            return;
+          }
+        } catch (err) {
+          console.warn("Canvas logo rasterize warning:", err);
+        }
+        resolve(null);
+      };
+      img.onerror = (e) => {
+        console.warn("Logo image load error:", e);
+        resolve(null);
+      };
+      img.src = "/logo.svg";
+    } catch (e) {
+      console.warn("getOzkonLogoPng error:", e);
+      resolve(null);
+    }
+  });
+};
+
+export const OZKON_LOGO_SVG_PATH = "/logo.svg";
